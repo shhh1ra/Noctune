@@ -552,18 +552,20 @@ export function App() {
                       Back to playlists
                     </button>
                     <p>{selectedPlaylist.kind === "liked" ? "Saved tracks" : "Playlist"}</p>
-                    <h2>{selectedPlaylist.name}</h2>
+                    <div className="playlist-title-row">
+                      <h2>{selectedPlaylist.name}</h2>
+                      <button
+                        className="hero-action playlist-play"
+                        onClick={() => playPlaylist(selectedPlaylist)}
+                        disabled={busy || playlistTracks.length === 0}
+                      >
+                        <Play size={18} />
+                        Play
+                      </button>
+                    </div>
                     <small>
                       {selectedPlaylist.total} tracks - {selectedPlaylist.owner}
                     </small>
-                    <button
-                      className="hero-action"
-                      onClick={() => playPlaylist(selectedPlaylist)}
-                      disabled={busy || playlistTracks.length === 0}
-                    >
-                      <Play size={18} />
-                      Play
-                    </button>
                   </div>
                 </div>
                 <div className="track-list">
@@ -723,34 +725,32 @@ export function App() {
 
             <div className="progress">
               <span>{formatTime(localProgress)}</span>
-              <div className="progress-slider">
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 1}
-                  value={Math.min(localProgress, duration || 1)}
-                  onChange={(event) => setLocalProgress(Number(event.target.value))}
-                  onMouseUp={(event) => seek(Number(event.currentTarget.value))}
-                  onKeyUp={(event) => seek(Number(event.currentTarget.value))}
-                  disabled={!track || busy}
-                  style={rangeStyle(progressPercent)}
-                />
-              </div>
+              <input
+                type="range"
+                min={0}
+                max={duration || 1}
+                value={Math.min(localProgress, duration || 1)}
+                onChange={(event) => setLocalProgress(Number(event.target.value))}
+                onMouseUp={(event) => seek(Number(event.currentTarget.value))}
+                onKeyUp={(event) => seek(Number(event.currentTarget.value))}
+                disabled={!track || busy}
+                style={rangeStyle(progressPercent)}
+              />
               <span>{formatTime(duration)}</span>
-
-              <div className="volume compact-volume">
-                <Volume2 size={18} />
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={volume}
-                  onChange={(event) => changeVolume(Number(event.target.value))}
-                  disabled={!playback?.device || busy}
-                  style={rangeStyle(volume)}
-                />
-              </div>
             </div>
+          </div>
+
+          <div className="volume compact-volume">
+            <Volume2 size={18} />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={volume}
+              onChange={(event) => changeVolume(Number(event.target.value))}
+              disabled={!playback?.device || busy}
+              style={rangeStyle(volume)}
+            />
           </div>
         </footer>
       </section>
