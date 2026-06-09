@@ -1,0 +1,56 @@
+{
+  "name": "custom-spotify-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform custom Spotify desktop client with Web Playback SDK and Connect fallback.",
+  "type": "module",
+  "main": "out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev --host 127.0.0.1",
+    "web:dev": "vite --host 127.0.0.1",
+    "build": "tsc && electron-vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "lint": "eslint . --ext ts,tsx --max-warnings 0"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron-store": "^10.0.0",
+    "framer-motion": "^12.0.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^6.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.1.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.0",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.0",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "dev.shhh1ra.customspotify",
+    "productName": "Custom Spotify Client",
+    "files": [
+      "out/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
