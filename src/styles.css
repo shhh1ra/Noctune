@@ -179,10 +179,10 @@ input {
 
 .stage {
   display: grid;
-  grid-template-rows: 72px minmax(0, 1fr) 132px;
+  grid-template-rows: 72px minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 100vh;
-  height: 100vh;
+  height: 10vh;
   padding: 0 36px 18px;
   overflow: hidden;
 }
@@ -267,7 +267,8 @@ input {
 
 .search-view,
 .devices-view,
-.playlists-view {
+.playlists-view,
+.lyrics-view {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -372,6 +373,70 @@ input {
 
 .devices-view {
   width: min(760px, 100%);
+}
+
+.lyrics-view {
+  min-height: 0;
+  gap: 28px;
+  overflow: hidden;
+}
+
+.lyrics-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.lyrics-header p {
+  margin: 0 0 8px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 13px;
+}
+
+.lyrics-header h2 {
+  margin: 0;
+  max-width: 880px;
+  overflow-wrap: anywhere;
+  font-size: 42px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.lyrics-header small {
+  display: block;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 15px;
+}
+
+.lyrics-panel {
+  display: grid;
+  align-content: center;
+  min-height: 0;
+  height: min(430px, 58vh);
+  padding: 34px 42px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 38%, transparent), rgba(0, 0, 0, 0.16)),
+    color-mix(in srgb, var(--accent-muted) 70%, #121416);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.lyrics-panel p {
+  margin: 0;
+  font-size: clamp(34px, 6vh, 64px);
+  font-weight: 820;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.lyrics-panel span {
+  max-width: 620px;
+  margin-top: 22px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 18px;
+  line-height: 1.45;
 }
 
 .playlists-view {
@@ -657,16 +722,16 @@ input {
 
 .player {
   display: grid;
-  grid-template-columns: minmax(190px, 320px) minmax(360px, 1fr) minmax(160px, 240px);
-  grid-template-rows: 54px 24px;
+  grid-template-columns: minmax(190px, 220px) minmax(360px, 1fr) minmax(160px, 240px);
+  grid-template-rows: 44px 22px;
   align-items: center;
-  gap: 20px;
+  gap: 5px 20px;
   min-width: 0;
-  min-height: 112px;
-  margin-top: 20px;
-  padding: 16px 18px;
+  min-height: 95px;
+  margin-top: 8px;
+  padding: 12px 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(8, 10, 12, 0.72);
   backdrop-filter: blur(22px);
 }
@@ -674,18 +739,18 @@ input {
 .mini-track {
   display: grid;
   grid-row: 1 / 3;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 50px minmax(0, 1fr);
   align-items: center;
   align-self: center;
   gap: 12px;
   min-width: 0;
-  transform: translateY(-8px);
+  transform: translateY(-1px);
 }
 
 .mini-track img,
 .mini-track > span {
-  width: 56px;
-  height: 56px;
+  width: 50px;
+  height: 50px;
   border-radius: 6px;
   object-fit: cover;
   background: var(--accent-muted);
@@ -694,8 +759,8 @@ input {
 .transport {
   display: grid;
   grid-row: 1 / 3;
-  grid-template-rows: 49px 24px;
-  gap: 10px;
+  grid-template-rows: 42px 22px;
+  gap: 8px;
   justify-self: center;
   width: min(620px, 100%);
   min-width: 0;
@@ -706,6 +771,7 @@ input {
   align-items: center;
   justify-content: center;
   gap: 14px;
+  transform: translateY(3px);
 }
 
 .transport button {
@@ -723,8 +789,8 @@ input {
 }
 
 .transport .play {
-  width: 54px;
-  height: 54px;
+  width: 40px;
+  height: 40px;
   background: #fff;
   color: #090b0d;
 }
@@ -765,7 +831,7 @@ input {
 
 .progress {
   width: 100%;
-  transform: translateY(-5px);
+  transform: translateY(0px);
 }
 
 .compact-volume {
@@ -773,9 +839,29 @@ input {
   grid-row: 2;
   align-self: center;
   justify-self: end;
-  width: min(190px, 100%);
+  width: min(230px, 100%);
   padding-right: 12px;
-  transform: translateY(-12px);
+  transform: translateY(1px);
+}
+
+.lyrics-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.lyrics-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.lyrics-toggle.active-icon {
+  color: #1ed760;
 }
 
 .progress input,

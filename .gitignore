@@ -5,6 +5,7 @@ dist-electron/
 release/
 .env
 .env.local
+.idea/
 *.log
 .DS_Store
 Thumbs.db

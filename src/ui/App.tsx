@@ -2,6 +2,7 @@ import {
   Laptop,
   ListMusic,
   LogIn,
+  Mic2,
   MonitorSpeaker,
   Pause,
   Play,
@@ -51,7 +52,7 @@ import { createWebPlaybackDevice, WebPlaybackDevice } from "../spotify/webPlayba
 import { spotifyConfig } from "../spotify/config";
 import { useAccent } from "./useAccent";
 
-type View = "now" | "playlists" | "search" | "devices";
+type View = "now" | "playlists" | "search" | "devices" | "lyrics";
 
 function formatTime(ms = 0) {
   const seconds = Math.floor(ms / 1000);
@@ -811,6 +812,28 @@ export function App() {
           </section>
         )}
 
+        {view === "lyrics" && (
+          <section className="lyrics-view">
+            <div className="lyrics-header">
+              <div>
+                <p>Lyrics</p>
+                <h2>{track?.name ?? "Nothing playing"}</h2>
+                <small>{artists}</small>
+              </div>
+              <button className="ghost compact" onClick={() => setView("now")}>
+                Now
+              </button>
+            </div>
+
+            <div className="lyrics-panel">
+              <p>Lyrics unavailable</p>
+              <span>
+                Provider is not connected yet. The screen is ready for synced or plain lyrics.
+              </span>
+            </div>
+          </section>
+        )}
+
         <footer className="player">
           <div className="mini-track">
             {cover ? <img src={cover} alt="" /> : <span />}
@@ -877,6 +900,14 @@ export function App() {
           </div>
 
           <div className="volume compact-volume">
+            <button
+              className={view === "lyrics" ? "lyrics-toggle active-icon" : "lyrics-toggle"}
+              onClick={() => setView(view === "lyrics" ? "now" : "lyrics")}
+              title="Lyrics"
+              disabled={!track}
+            >
+              <Mic2 size={18} />
+            </button>
             <Volume2 size={18} />
             <input
               type="range"
