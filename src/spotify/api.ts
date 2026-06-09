@@ -123,6 +123,28 @@ type Paging<T> = {
   total: number;
 };
 
+async function fetchAllPages<T>(
+  tokens: SpotifyTokens,
+  loadPage: (offset: number) => Promise<Paging<T>>,
+  limit = 50,
+) {
+  const items: T[] = [];
+  let total = 0;
+  let offset = 0;
+  let hasNext = true;
+
+  while (hasNext) {
+    const page = await loadPage(offset);
+    const pageItems = page.items ?? [];
+    items.push(...pageItems);
+    total = page.total ?? items.length;
+    offset += pageItems.length || limit;
+    hasNext = Boolean(page.next) && pageItems.length > 0;
+  }
+
+  return { items, total };
+}
+
 export async function getMe(tokens: SpotifyTokens) {
   return spotifyFetch<SpotifyUser>("/me", tokens);
 }
@@ -135,8 +157,16 @@ export async function getDevices(tokens: SpotifyTokens) {
   return spotifyFetch<{ devices: SpotifyDevice[] }>("/me/player/devices", tokens);
 }
 
-export async function getMyPlaylists(tokens: SpotifyTokens) {
-  return spotifyFetch<Paging<SpotifyPlaylist>>("/me/playlists?limit=50", tokens);
+export async function getMyPlaylists(tokens: SpotifyTokens, limit = 50, offset = 0) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return spotifyFetch<Paging<SpotifyPlaylist>>(`/me/playlists?${params.toString()}`, tokens);
+}
+
+export async function getAllMyPlaylists(tokens: SpotifyTokens) {
+  return fetchAllPages(tokens, (offset) => getMyPlaylists(tokens, 50, offset), 50);
 }
 
 export async function getSavedTracks(tokens: SpotifyTokens, limit = 50, offset = 0) {

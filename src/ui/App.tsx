@@ -23,7 +23,7 @@ import {
 } from "../spotify/auth";
 import {
   getDevices,
-  getMyPlaylists,
+  getAllMyPlaylists,
   getMe,
   getPlaylistTracks,
   getPlayback,
@@ -129,7 +129,7 @@ export function App() {
     try {
       const [savedTracks, myPlaylists] = await Promise.all([
         getSavedTracks(nextTokens, 1),
-        getMyPlaylists(nextTokens),
+        getAllMyPlaylists(nextTokens),
       ]);
       const playlistItems = myPlaylists?.items ?? [];
 
@@ -176,6 +176,13 @@ export function App() {
           ? await getSavedTracks(tokens, 50, 0)
           : await getPlaylistTracks(tokens, playlist.id, 50, 0);
       const items = response?.items ?? [];
+      const total = response?.total ?? playlist.total;
+      setSelectedPlaylist((current) => (current ? { ...current, total } : current));
+      setPlaylists((current) =>
+        current.map((item) =>
+          item.kind === playlist.kind && item.id === playlist.id ? { ...item, total } : item,
+        ),
+      );
       setPlaylistTracks(items.filter((item) => item.track?.uri));
       setPlaylistOffset(items.length);
       setPlaylistHasMore(Boolean(response?.next));
