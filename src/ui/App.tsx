@@ -13,7 +13,7 @@ import {
   SkipForward,
   Volume2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildLoginUrl,
   clearTokens,
@@ -26,6 +26,7 @@ import {
   getAllMyPlaylists,
   getMe,
   getPlaylistTracks,
+  getPlaylistTracksByHref,
   getPlayback,
   getSavedTracks,
   playContext,
@@ -66,8 +67,17 @@ function playlistImage(playlist: PlaylistSummary) {
   return playlist.image;
 }
 
+function playlistTrack(item: PlaylistTrack) {
+  return item.track ?? item.item ?? null;
+}
+
 function rangeStyle(percent: number) {
   return { "--range-fill": `${Math.min(100, Math.max(0, percent))}%` } as React.CSSProperties;
+}
+
+function playlistStatusMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  return error.message;
 }
 
 export function App() {
@@ -92,6 +102,7 @@ export function App() {
   const [localVolume, setLocalVolume] = useState(75);
   const [busy, setBusy] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
+  const playlistLoadVersion = useRef(0);
 
   const track = playback?.item ?? null;
   const cover = bestImage(track);
@@ -125,12 +136,16 @@ export function App() {
 
   async function loadPlaylists(nextTokens = tokens) {
     if (!nextTokens) return;
+    const loadVersion = playlistLoadVersion.current + 1;
+    playlistLoadVersion.current = loadVersion;
     setLoadingPlaylists(true);
     try {
       const [savedTracks, myPlaylists] = await Promise.all([
         getSavedTracks(nextTokens, 1),
         getAllMyPlaylists(nextTokens),
       ]);
+      if (playlistLoadVersion.current !== loadVersion) return;
+
       const playlistItems = myPlaylists?.items ?? [];
 
       const likedSongs: PlaylistSummary = {
@@ -142,7 +157,7 @@ export function App() {
         kind: "liked",
       };
 
-      setPlaylists([
+      const nextPlaylists = [
         likedSongs,
         ...playlistItems.map((playlist) => ({
           id: playlist.id,
@@ -152,13 +167,49 @@ export function App() {
           image: playlist.images?.[0]?.url,
           owner: playlist.owner?.display_name ?? playlist.owner?.id ?? "Unknown",
           total: playlist.tracks?.total ?? 0,
+          tracksHref: playlist.tracks?.href,
           kind: "playlist" as const,
         })),
-      ]);
+      ];
+
+      setPlaylists(nextPlaylists);
+      void refreshPlaylistTotals(nextPlaylists, nextTokens, loadVersion);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Playlists unavailable");
     } finally {
-      setLoadingPlaylists(false);
+      if (playlistLoadVersion.current === loadVersion) {
+        setLoadingPlaylists(false);
+      }
+    }
+  }
+
+  async function refreshPlaylistTotals(
+    nextPlaylists: PlaylistSummary[],
+    nextTokens: SpotifyTokens,
+    loadVersion = playlistLoadVersion.current,
+  ) {
+    const remotePlaylists = nextPlaylists.filter((playlist) => playlist.kind === "playlist");
+
+    for (const playlist of remotePlaylists) {
+      if (playlistLoadVersion.current !== loadVersion) return;
+
+      let total = playlist.total;
+      try {
+        const response = playlist.tracksHref
+          ? await getPlaylistTracksByHref(nextTokens, playlist.tracksHref, 50, 0)
+          : await getPlaylistTracks(nextTokens, playlist.id, 50, 0);
+        total = response?.total ?? playlist.total;
+      } catch {
+        continue;
+      }
+
+      if (playlistLoadVersion.current !== loadVersion) return;
+
+      setPlaylists((current) =>
+        current.map((item) =>
+          item.kind === playlist.kind && item.id === playlist.id ? { ...item, total } : item,
+        ),
+      );
     }
   }
 
@@ -171,10 +222,7 @@ export function App() {
     setPlaylistOffset(0);
     setPlaylistHasMore(false);
     try {
-      const response =
-        playlist.kind === "liked"
-          ? await getSavedTracks(tokens, 50, 0)
-          : await getPlaylistTracks(tokens, playlist.id, 50, 0);
+      const response = await loadPlaylistTrackPage(playlist, 0);
       const items = response?.items ?? [];
       const total = response?.total ?? playlist.total;
       setSelectedPlaylist((current) => (current ? { ...current, total } : current));
@@ -183,15 +231,27 @@ export function App() {
           item.kind === playlist.kind && item.id === playlist.id ? { ...item, total } : item,
         ),
       );
-      setPlaylistTracks(items.filter((item) => item.track?.uri));
+      setPlaylistTracks(items.filter((item) => playlistTrack(item)?.uri));
       setPlaylistOffset(items.length);
       setPlaylistHasMore(Boolean(response?.next));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Playlist tracks unavailable");
+      setStatus(playlistStatusMessage(error, "Playlist tracks unavailable"));
       setPlaylistTracks([]);
     } finally {
       setLoadingPlaylists(false);
     }
+  }
+
+  async function loadPlaylistTrackPage(playlist: PlaylistSummary, offset: number) {
+    if (playlist.kind === "liked") {
+      return getSavedTracks(tokens!, 50, offset);
+    }
+
+    if (playlist.tracksHref) {
+      return getPlaylistTracksByHref(tokens!, playlist.tracksHref, 50, offset);
+    }
+
+    return getPlaylistTracks(tokens!, playlist.id, 50, offset);
   }
 
   async function loadMorePlaylistTracks() {
@@ -201,19 +261,16 @@ export function App() {
 
     setLoadingMoreTracks(true);
     try {
-      const response =
-        selectedPlaylist.kind === "liked"
-          ? await getSavedTracks(tokens, 50, playlistOffset)
-          : await getPlaylistTracks(tokens, selectedPlaylist.id, 50, playlistOffset);
+      const response = await loadPlaylistTrackPage(selectedPlaylist, playlistOffset);
       const items = response?.items ?? [];
       setPlaylistTracks((current) => [
         ...current,
-        ...items.filter((item) => item.track?.uri),
+        ...items.filter((item) => playlistTrack(item)?.uri),
       ]);
       setPlaylistOffset((current) => current + items.length);
       setPlaylistHasMore(Boolean(response?.next));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "More tracks unavailable");
+      setStatus(playlistStatusMessage(error, "More tracks unavailable"));
     } finally {
       setLoadingMoreTracks(false);
     }
@@ -270,6 +327,14 @@ export function App() {
       window.clearInterval(timer);
     };
   }, [tokens]);
+
+  useEffect(() => {
+    if (view !== "playlists" || selectedPlaylist || !tokens || playlists.length === 0) {
+      return;
+    }
+
+    void refreshPlaylistTotals(playlists, tokens);
+  }, [view, selectedPlaylist, tokens, playlists.length]);
 
   useEffect(() => {
     if (!playback?.is_playing || !duration) return;
@@ -406,7 +471,9 @@ export function App() {
           return;
         }
 
-        const firstSaved = playlistTracks.find((item) => item.track?.uri)?.track;
+        const firstSaved = playlistTracks
+          .map((item) => playlistTrack(item))
+          .find((item) => item?.uri);
         if (firstSaved) await playTrack(tokens, firstSaved.uri, targetDeviceId);
       },
       `Playing ${playlist.name}`,
@@ -636,25 +703,26 @@ export function App() {
                   </div>
                 </div>
                 <div className="track-list">
-                  {playlistTracks.map((item, index) =>
-                    item.track ? (
+                  {playlistTracks.map((item, index) => {
+                    const savedTrack = playlistTrack(item);
+                    return savedTrack ? (
                       <button
                         className="track-row"
-                        key={`${item.track.uri}-${index}`}
-                        onClick={() => play(item.track!)}
+                        key={`${savedTrack.uri}-${index}`}
+                        onClick={() => play(savedTrack)}
                         disabled={busy}
                       >
                         <span>{index + 1}</span>
-                        {bestImage(item.track) ? <img src={bestImage(item.track)} alt="" /> : <i />}
+                        {bestImage(savedTrack) ? <img src={bestImage(savedTrack)} alt="" /> : <i />}
                         <span>
-                          <strong>{item.track.name}</strong>
-                          <small>{item.track.artists.map((artist) => artist.name).join(", ")}</small>
+                          <strong>{savedTrack.name}</strong>
+                          <small>{savedTrack.artists.map((artist) => artist.name).join(", ")}</small>
                         </span>
-                        <small>{item.track.album.name}</small>
-                        <small>{formatTime(item.track.duration_ms)}</small>
+                        <small>{savedTrack.album.name}</small>
+                        <small>{formatTime(savedTrack.duration_ms)}</small>
                       </button>
-                    ) : null,
-                  )}
+                    ) : null;
+                  })}
                   {loadingPlaylists && <p className="empty">Loading tracks...</p>}
                   {loadingMoreTracks && <p className="empty">Loading more tracks...</p>}
                   {!loadingPlaylists && playlistTracks.length === 0 && (

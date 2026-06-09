@@ -2,23 +2,7 @@ import { SpotifyTokens, refreshTokens } from "./auth";
 
 const API_ROOT = "https://api.spotify.com/v1";
 
-export async function spotifyFetch<T>(
-  path: string,
-  tokens: SpotifyTokens,
-  init: RequestInit = {},
-): Promise<T> {
-  const usableTokens =
-    tokens.expiresAt - Date.now() < 60_000 ? await refreshTokens(tokens) : tokens;
-
-  const response = await fetch(`${API_ROOT}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${usableTokens.accessToken}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-  });
-
+async function parseSpotifyResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -36,6 +20,10 @@ export async function spotifyFetch<T>(
       }
     }
 
+    if (response.status === 403 && (!message || message === "Forbidden")) {
+      message = "Playlist access denied. Sign out and connect Spotify again.";
+    }
+
     throw new Error(message || `Spotify request failed: ${response.status}`);
   }
 
@@ -43,6 +31,46 @@ export async function spotifyFetch<T>(
   if (!contentType.includes("application/json")) return text as T;
 
   return JSON.parse(text) as T;
+}
+
+export async function spotifyFetch<T>(
+  path: string,
+  tokens: SpotifyTokens,
+  init: RequestInit = {},
+): Promise<T> {
+  const usableTokens =
+    tokens.expiresAt - Date.now() < 60_000 ? await refreshTokens(tokens) : tokens;
+
+  const response = await fetch(`${API_ROOT}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${usableTokens.accessToken}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+
+  return parseSpotifyResponse<T>(response);
+}
+
+export async function spotifyFetchUrl<T>(
+  url: string,
+  tokens: SpotifyTokens,
+  init: RequestInit = {},
+): Promise<T> {
+  const usableTokens =
+    tokens.expiresAt - Date.now() < 60_000 ? await refreshTokens(tokens) : tokens;
+
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${usableTokens.accessToken}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+
+  return parseSpotifyResponse<T>(response);
 }
 
 export type SpotifyImage = { url: string; width: number; height: number };
@@ -81,7 +109,7 @@ export type SpotifyPlaylist = {
   description: string | null;
   images: SpotifyImage[] | null;
   owner: { display_name: string | null; id: string };
-  tracks: { total: number };
+  tracks: { total: number; href?: string };
 };
 
 export type PlaylistSummary = {
@@ -92,12 +120,14 @@ export type PlaylistSummary = {
   image?: string;
   owner: string;
   total: number;
+  tracksHref?: string;
   kind: "liked" | "playlist";
 };
 
 export type PlaylistTrack = {
   added_at?: string;
-  track: SpotifyTrack | null;
+  track?: SpotifyTrack | null;
+  item?: SpotifyTrack | null;
 };
 
 export type PlaybackState = {
@@ -186,13 +216,27 @@ export async function getPlaylistTracks(
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
-    fields:
-      "items(added_at,track(id,name,uri,duration_ms,explicit,popularity,album(name,images),artists(name))),limit,next,offset,total",
   });
   return spotifyFetch<Paging<PlaylistTrack>>(
-    `/playlists/${playlistId}/tracks?${params.toString()}`,
+    `/playlists/${playlistId}/items?${params.toString()}`,
     tokens,
   );
+}
+
+export async function getPlaylistTracksByHref(
+  tokens: SpotifyTokens,
+  href: string,
+  limit = 100,
+  offset = 0,
+) {
+  const url = new URL(href);
+  if (url.pathname.endsWith("/tracks")) {
+    url.pathname = url.pathname.replace(/\/tracks$/, "/items");
+  }
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+
+  return spotifyFetchUrl<Paging<PlaylistTrack>>(url.toString(), tokens);
 }
 
 export async function transferPlayback(
