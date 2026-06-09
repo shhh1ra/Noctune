@@ -11,5 +11,6 @@ export const spotifyConfig = {
     "user-read-currently-playing",
     "user-library-read",
     "playlist-read-private",
+    "playlist-read-collaborative",
   ],
 };

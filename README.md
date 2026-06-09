@@ -9,6 +9,7 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic accent col
 - Attempts in-app playback through Spotify Web Playback SDK.
 - Falls back to Spotify Connect controls when in-app playback is unavailable.
 - Searches Spotify tracks and starts playback on the in-app player or active Connect device.
+- Shows Liked Songs and Spotify playlists, with a full-screen track list view.
 - Shows available Spotify Connect devices and lets you transfer playback.
 - Supports play/pause, previous/next, seek, volume, shuffle, and repeat controls.
 - Does not access or download raw audio files.
@@ -41,8 +42,10 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic accent col
 6. Start the desktop app:
 
    ```bash
-   npm run electron:dev
+   npm run dev
    ```
+
+If scopes change during development, sign out in the app and connect Spotify again.
 
 ## Spotify limitations
 

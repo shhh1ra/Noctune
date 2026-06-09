@@ -57,6 +57,32 @@ export type SpotifyUser = {
   product?: string;
 };
 
+export type SpotifyPlaylist = {
+  id: string;
+  name: string;
+  uri: string;
+  description: string | null;
+  images: SpotifyImage[];
+  owner: { display_name: string | null; id: string };
+  tracks: { total: number };
+};
+
+export type PlaylistSummary = {
+  id: string;
+  name: string;
+  uri?: string;
+  description?: string | null;
+  image?: string;
+  owner: string;
+  total: number;
+  kind: "liked" | "playlist";
+};
+
+export type PlaylistTrack = {
+  added_at?: string;
+  track: SpotifyTrack;
+};
+
 export type PlaybackState = {
   is_playing: boolean;
   progress_ms: number;
@@ -72,6 +98,14 @@ export type SearchTracksResponse = {
   };
 };
 
+type Paging<T> = {
+  items: T[];
+  limit: number;
+  next: string | null;
+  offset: number;
+  total: number;
+};
+
 export async function getMe(tokens: SpotifyTokens) {
   return spotifyFetch<SpotifyUser>("/me", tokens);
 }
@@ -82,6 +116,31 @@ export async function getPlayback(tokens: SpotifyTokens) {
 
 export async function getDevices(tokens: SpotifyTokens) {
   return spotifyFetch<{ devices: SpotifyDevice[] }>("/me/player/devices", tokens);
+}
+
+export async function getMyPlaylists(tokens: SpotifyTokens) {
+  return spotifyFetch<Paging<SpotifyPlaylist>>("/me/playlists?limit=50", tokens);
+}
+
+export async function getSavedTracks(tokens: SpotifyTokens, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return spotifyFetch<Paging<PlaylistTrack>>(`/me/tracks?${params.toString()}`, tokens);
+}
+
+export async function getPlaylistTracks(
+  tokens: SpotifyTokens,
+  playlistId: string,
+  limit = 100,
+) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    fields:
+      "items(added_at,track(id,name,uri,duration_ms,explicit,popularity,album(name,images),artists(name))),limit,next,offset,total",
+  });
+  return spotifyFetch<Paging<PlaylistTrack>>(
+    `/playlists/${playlistId}/tracks?${params.toString()}`,
+    tokens,
+  );
 }
 
 export async function transferPlayback(
@@ -162,5 +221,20 @@ export async function playTrack(
   return spotifyFetch<void>(`/me/player/play${suffix}`, tokens, {
     method: "PUT",
     body: JSON.stringify({ uris: [uri] }),
+  });
+}
+
+export async function playContext(
+  tokens: SpotifyTokens,
+  contextUri: string,
+  deviceId?: string | null,
+) {
+  const params = new URLSearchParams();
+  if (deviceId) params.set("device_id", deviceId);
+
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return spotifyFetch<void>(`/me/player/play${suffix}`, tokens, {
+    method: "PUT",
+    body: JSON.stringify({ context_uri: contextUri }),
   });
 }

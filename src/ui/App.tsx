@@ -5,6 +5,7 @@ import {
   MonitorSpeaker,
   Pause,
   Play,
+  Rows3,
   Repeat,
   Search,
   Shuffle,
@@ -22,9 +23,15 @@ import {
 } from "../spotify/auth";
 import {
   getDevices,
+  getMyPlaylists,
   getMe,
+  getPlaylistTracks,
   getPlayback,
+  getSavedTracks,
+  playContext,
   playTrack,
+  PlaylistSummary,
+  PlaylistTrack,
   PlaybackState,
   searchTracks,
   seekPlayback,
@@ -43,7 +50,7 @@ import { createWebPlaybackDevice, WebPlaybackDevice } from "../spotify/webPlayba
 import { spotifyConfig } from "../spotify/config";
 import { useAccent } from "./useAccent";
 
-type View = "now" | "search" | "devices";
+type View = "now" | "playlists" | "search" | "devices";
 
 function formatTime(ms = 0) {
   const seconds = Math.floor(ms / 1000);
@@ -53,6 +60,10 @@ function formatTime(ms = 0) {
 
 function bestImage(track?: SpotifyTrack | null) {
   return track?.album.images[0]?.url;
+}
+
+function playlistImage(playlist: PlaylistSummary) {
+  return playlist.image;
 }
 
 export function App() {
@@ -66,6 +77,10 @@ export function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SpotifyTrack[]>([]);
   const [searching, setSearching] = useState(false);
+  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSummary | null>(null);
+  const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrack[]>([]);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
 
@@ -95,6 +110,63 @@ export function App() {
     setStatus(nextPlayback?.device ? "Connected" : "Choose a Spotify device");
   }
 
+  async function loadPlaylists(nextTokens = tokens) {
+    if (!nextTokens) return;
+    setLoadingPlaylists(true);
+    try {
+      const [savedTracks, myPlaylists] = await Promise.all([
+        getSavedTracks(nextTokens, 1),
+        getMyPlaylists(nextTokens),
+      ]);
+
+      const likedSongs: PlaylistSummary = {
+        id: "liked",
+        name: "Liked Songs",
+        description: "Saved tracks",
+        owner: profile?.display_name ?? "You",
+        total: savedTracks.total,
+        kind: "liked",
+      };
+
+      setPlaylists([
+        likedSongs,
+        ...myPlaylists.items.map((playlist) => ({
+          id: playlist.id,
+          name: playlist.name,
+          uri: playlist.uri,
+          description: playlist.description,
+          image: playlist.images[0]?.url,
+          owner: playlist.owner.display_name ?? playlist.owner.id,
+          total: playlist.tracks.total,
+          kind: "playlist" as const,
+        })),
+      ]);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Playlists unavailable");
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  }
+
+  async function openPlaylist(playlist: PlaylistSummary) {
+    if (!tokens) return;
+    setSelectedPlaylist(playlist);
+    setView("playlists");
+    setLoadingPlaylists(true);
+    try {
+      const response =
+        playlist.kind === "liked"
+          ? await getSavedTracks(tokens, 50)
+          : await getPlaylistTracks(tokens, playlist.id, 100);
+      setPlaylistTracks(response.items.filter((item) => item.track?.uri));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Playlist tracks unavailable");
+      setPlaylistTracks([]);
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  }
+
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("code");
     if (!code || tokens) return;
@@ -104,6 +176,7 @@ export function App() {
         setTokens(nextTokens);
         window.history.replaceState({}, document.title, "/");
         setProfile(await getMe(nextTokens));
+        await loadPlaylists(nextTokens);
         await refreshState(nextTokens);
       })
       .catch(() => setStatus("Login failed"));
@@ -118,6 +191,7 @@ export function App() {
         if (active) setProfile(nextProfile);
       })
       .catch(() => setStatus("Profile unavailable"));
+    void loadPlaylists(tokens);
 
     const poll = async () => {
       try {
@@ -258,6 +332,27 @@ export function App() {
     setView("now");
   }
 
+  function playPlaylist(playlist: PlaylistSummary) {
+    if (!tokens) return;
+    void run(
+      async () => {
+        if (webDevice?.deviceId && activeDeviceId !== webDevice.deviceId) {
+          await transferPlayback(tokens, webDevice.deviceId, false);
+        }
+
+        if (playlist.kind === "playlist" && playlist.uri) {
+          await playContext(tokens, playlist.uri, targetDeviceId);
+          return;
+        }
+
+        const firstSaved = playlistTracks[0]?.track;
+        if (firstSaved) await playTrack(tokens, firstSaved.uri, targetDeviceId);
+      },
+      `Playing ${playlist.name}`,
+    );
+    setView("now");
+  }
+
   function seek(value: number) {
     if (!tokens) return;
     setLocalProgress(value);
@@ -311,6 +406,17 @@ export function App() {
           Now
         </button>
         <button
+          className={view === "playlists" ? "nav active" : "nav"}
+          title="Playlists"
+          onClick={() => {
+            setView("playlists");
+            setSelectedPlaylist(null);
+          }}
+        >
+          <Rows3 size={20} />
+          Playlists
+        </button>
+        <button
           className={view === "search" ? "nav active" : "nav"}
           title="Search"
           onClick={() => setView("search")}
@@ -338,6 +444,9 @@ export function App() {
                 setPlayback(null);
                 setDevices([]);
                 setWebDevice(null);
+                setPlaylists([]);
+                setSelectedPlaylist(null);
+                setPlaylistTracks([]);
               }}
             >
               Sign out
@@ -376,6 +485,109 @@ export function App() {
           </section>
         )}
 
+        {view === "playlists" && (
+          <section className="playlists-view">
+            {!selectedPlaylist ? (
+              <>
+                <div className="section-heading">
+                  <div>
+                    <p>Library</p>
+                    <h2>Playlists</h2>
+                  </div>
+                  <button
+                    className="ghost compact"
+                    onClick={() => void loadPlaylists(tokens)}
+                    disabled={!signedIn || loadingPlaylists}
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="playlist-grid">
+                  {playlists.map((playlist) => (
+                    <button
+                      className={
+                        playlist.kind === "liked" ? "playlist-card liked" : "playlist-card"
+                      }
+                      key={`${playlist.kind}-${playlist.id}`}
+                      onClick={() => void openPlaylist(playlist)}
+                      disabled={loadingPlaylists}
+                    >
+                      {playlistImage(playlist) ? (
+                        <img src={playlistImage(playlist)} alt="" />
+                      ) : (
+                        <span className="playlist-art">
+                          <ListMusic size={32} />
+                        </span>
+                      )}
+                      <strong>{playlist.name}</strong>
+                      <small>
+                        {playlist.total} tracks - {playlist.owner}
+                      </small>
+                    </button>
+                  ))}
+                  {signedIn && !loadingPlaylists && playlists.length === 0 && (
+                    <p className="empty">No playlists found</p>
+                  )}
+                  {loadingPlaylists && <p className="empty">Loading playlists...</p>}
+                </div>
+              </>
+            ) : (
+              <div className="playlist-detail">
+                <div className="playlist-hero">
+                  {playlistImage(selectedPlaylist) ? (
+                    <img src={playlistImage(selectedPlaylist)} alt="" />
+                  ) : (
+                    <span className="playlist-art large">
+                      <ListMusic size={52} />
+                    </span>
+                  )}
+                  <div>
+                    <button className="text-button" onClick={() => setSelectedPlaylist(null)}>
+                      Back to playlists
+                    </button>
+                    <p>{selectedPlaylist.kind === "liked" ? "Saved tracks" : "Playlist"}</p>
+                    <h2>{selectedPlaylist.name}</h2>
+                    <small>
+                      {selectedPlaylist.total} tracks - {selectedPlaylist.owner}
+                    </small>
+                    <button
+                      className="hero-action"
+                      onClick={() => playPlaylist(selectedPlaylist)}
+                      disabled={busy || playlistTracks.length === 0}
+                    >
+                      <Play size={18} />
+                      Play
+                    </button>
+                  </div>
+                </div>
+                <div className="track-list">
+                  {playlistTracks.map((item, index) => (
+                    <button
+                      className="track-row"
+                      key={`${item.track.uri}-${index}`}
+                      onClick={() => play(item.track)}
+                      disabled={busy}
+                    >
+                      <span>{index + 1}</span>
+                      {bestImage(item.track) ? <img src={bestImage(item.track)} alt="" /> : <i />}
+                      <span>
+                        <strong>{item.track.name}</strong>
+                        <small>{item.track.artists.map((artist) => artist.name).join(", ")}</small>
+                      </span>
+                      <small>{item.track.album.name}</small>
+                      <small>{formatTime(item.track.duration_ms)}</small>
+                    </button>
+                  ))}
+                  {loadingPlaylists && <p className="empty">Loading tracks...</p>}
+                  {!loadingPlaylists && playlistTracks.length === 0 && (
+                    <p className="empty">No playable tracks here</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {view === "search" && (
           <section className="search-view">
             <label className="search-box">
@@ -401,7 +613,7 @@ export function App() {
                     <span>
                       <strong>{result.name}</strong>
                       <small>
-                        {result.artists.map((artist) => artist.name).join(", ")} ·{" "}
+                        {result.artists.map((artist) => artist.name).join(", ")} -{" "}
                         {result.album.name}
                       </small>
                     </span>
@@ -442,7 +654,7 @@ export function App() {
                   <strong>{device.name}</strong>
                   <small>
                     {device.type}
-                    {device.is_restricted ? " · restricted" : ""}
+                    {device.is_restricted ? " - restricted" : ""}
                   </small>
                 </span>
               </button>
