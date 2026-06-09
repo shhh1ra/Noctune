@@ -20,12 +20,29 @@ export async function spotifyFetch<T>(
   });
 
   if (response.status === 204) return undefined as T;
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const text = await response.text();
+
   if (!response.ok) {
-    const message = await response.text();
+    let message = text;
+
+    if (contentType.includes("application/json") && text) {
+      try {
+        const payload = JSON.parse(text) as { error?: { message?: string } };
+        message = payload.error?.message ?? text;
+      } catch {
+        message = text;
+      }
+    }
+
     throw new Error(message || `Spotify request failed: ${response.status}`);
   }
 
-  return response.json() as Promise<T>;
+  if (!text) return undefined as T;
+  if (!contentType.includes("application/json")) return text as T;
+
+  return JSON.parse(text) as T;
 }
 
 export type SpotifyImage = { url: string; width: number; height: number };
@@ -34,7 +51,7 @@ export type SpotifyTrack = {
   name: string;
   uri: string;
   duration_ms: number;
-  album: { name: string; images: SpotifyImage[] };
+  album: { name: string; images: SpotifyImage[] | null };
   artists: Array<{ name: string }>;
   explicit?: boolean;
   popularity?: number;
@@ -53,7 +70,7 @@ export type SpotifyDevice = {
 export type SpotifyUser = {
   display_name: string | null;
   id: string;
-  images?: SpotifyImage[];
+  images?: SpotifyImage[] | null;
   product?: string;
 };
 
@@ -62,7 +79,7 @@ export type SpotifyPlaylist = {
   name: string;
   uri: string;
   description: string | null;
-  images: SpotifyImage[];
+  images: SpotifyImage[] | null;
   owner: { display_name: string | null; id: string };
   tracks: { total: number };
 };
@@ -80,7 +97,7 @@ export type PlaylistSummary = {
 
 export type PlaylistTrack = {
   added_at?: string;
-  track: SpotifyTrack;
+  track: SpotifyTrack | null;
 };
 
 export type PlaybackState = {

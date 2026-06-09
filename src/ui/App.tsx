@@ -59,11 +59,15 @@ function formatTime(ms = 0) {
 }
 
 function bestImage(track?: SpotifyTrack | null) {
-  return track?.album.images[0]?.url;
+  return track?.album.images?.[0]?.url;
 }
 
 function playlistImage(playlist: PlaylistSummary) {
   return playlist.image;
+}
+
+function rangeStyle(percent: number) {
+  return { "--range-fill": `${Math.min(100, Math.max(0, percent))}%` } as React.CSSProperties;
 }
 
 export function App() {
@@ -97,6 +101,7 @@ export function App() {
   const targetDeviceId = webDevice?.deviceId ?? activeDeviceId;
   const volume = playback?.device?.volume_percent ?? 75;
   const duration = track?.duration_ms ?? 0;
+  const progressPercent = duration ? (localProgress / duration) * 100 : 0;
 
   async function refreshState(nextTokens = tokens) {
     if (!nextTokens) return;
@@ -135,7 +140,7 @@ export function App() {
           name: playlist.name,
           uri: playlist.uri,
           description: playlist.description,
-          image: playlist.images[0]?.url,
+          image: playlist.images?.[0]?.url,
           owner: playlist.owner.display_name ?? playlist.owner.id,
           total: playlist.tracks.total,
           kind: "playlist" as const,
@@ -298,7 +303,7 @@ export function App() {
       await action();
       await refreshState(tokens);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Playback command failed");
+      setStatus(error instanceof Error ? error.message : "Spotify command failed");
     } finally {
       setBusy(false);
     }
@@ -345,7 +350,7 @@ export function App() {
           return;
         }
 
-        const firstSaved = playlistTracks[0]?.track;
+        const firstSaved = playlistTracks.find((item) => item.track?.uri)?.track;
         if (firstSaved) await playTrack(tokens, firstSaved.uri, targetDeviceId);
       },
       `Playing ${playlist.name}`,
@@ -561,23 +566,25 @@ export function App() {
                   </div>
                 </div>
                 <div className="track-list">
-                  {playlistTracks.map((item, index) => (
-                    <button
-                      className="track-row"
-                      key={`${item.track.uri}-${index}`}
-                      onClick={() => play(item.track)}
-                      disabled={busy}
-                    >
-                      <span>{index + 1}</span>
-                      {bestImage(item.track) ? <img src={bestImage(item.track)} alt="" /> : <i />}
-                      <span>
-                        <strong>{item.track.name}</strong>
-                        <small>{item.track.artists.map((artist) => artist.name).join(", ")}</small>
-                      </span>
-                      <small>{item.track.album.name}</small>
-                      <small>{formatTime(item.track.duration_ms)}</small>
-                    </button>
-                  ))}
+                  {playlistTracks.map((item, index) =>
+                    item.track ? (
+                      <button
+                        className="track-row"
+                        key={`${item.track.uri}-${index}`}
+                        onClick={() => play(item.track!)}
+                        disabled={busy}
+                      >
+                        <span>{index + 1}</span>
+                        {bestImage(item.track) ? <img src={bestImage(item.track)} alt="" /> : <i />}
+                        <span>
+                          <strong>{item.track.name}</strong>
+                          <small>{item.track.artists.map((artist) => artist.name).join(", ")}</small>
+                        </span>
+                        <small>{item.track.album.name}</small>
+                        <small>{formatTime(item.track.duration_ms)}</small>
+                      </button>
+                    ) : null,
+                  )}
                   {loadingPlaylists && <p className="empty">Loading tracks...</p>}
                   {!loadingPlaylists && playlistTracks.length === 0 && (
                     <p className="empty">No playable tracks here</p>
@@ -723,6 +730,7 @@ export function App() {
                 onMouseUp={(event) => seek(Number(event.currentTarget.value))}
                 onKeyUp={(event) => seek(Number(event.currentTarget.value))}
                 disabled={!track || busy}
+                style={rangeStyle(progressPercent)}
               />
               <span>{formatTime(duration)}</span>
             </div>
@@ -737,6 +745,7 @@ export function App() {
               value={volume}
               onChange={(event) => changeVolume(Number(event.target.value))}
               disabled={!playback?.device || busy}
+              style={rangeStyle(volume)}
             />
           </div>
         </footer>
