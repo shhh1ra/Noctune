@@ -358,7 +358,7 @@ export async function searchTracks(tokens: SpotifyTokens, query: string) {
   const params = new URLSearchParams({
     q: query,
     type: "track",
-    limit: "12",
+    limit: "10",
   });
   return spotifyFetch<SearchTracksResponse>(`/search?${params.toString()}`, tokens);
 }
