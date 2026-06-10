@@ -14,6 +14,7 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic or custom 
 - Caches playlist metadata, playlist covers, track images, and playlist track counts for faster startup.
 - Shows a compact "Up next" sidebar preview.
 - Adds tracks to the Spotify queue from a right-click track menu.
+- Adds tracks to playlists and removes tracks from the current playlist or Liked Songs.
 - Shows available Spotify Connect devices and lets you transfer playback.
 - Supports play/pause, previous/next, seek, volume, shuffle, and repeat controls.
 - Includes a lyrics screen shell, ready for a future lyrics provider.
@@ -51,7 +52,7 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic or custom 
    npm run dev
    ```
 
-If scopes change during development, sign out in the app and connect Spotify again.
+If scopes change during development, sign out in the app and connect Spotify again. Playlist editing requires the `playlist-modify-private`, `playlist-modify-public`, and `user-library-modify` scopes.
 
 ## Build
 

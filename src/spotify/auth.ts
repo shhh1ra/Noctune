@@ -8,14 +8,29 @@ export type SpotifyTokens = {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+  scopes?: string[];
 };
+
+function parseScopeList(scope?: string) {
+  return scope?.split(" ").filter(Boolean) ?? [];
+}
+
+function hasRequiredScopes(tokens: SpotifyTokens) {
+  const grantedScopes = new Set(tokens.scopes ?? []);
+  return spotifyConfig.scopes.every((scope) => grantedScopes.has(scope));
+}
 
 export function getStoredTokens(): SpotifyTokens | null {
   const raw = localStorage.getItem(TOKEN_KEY);
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as SpotifyTokens;
+    const tokens = JSON.parse(raw) as SpotifyTokens;
+    if (!hasRequiredScopes(tokens)) {
+      clearTokens();
+      return null;
+    }
+    return tokens;
   } catch {
     clearTokens();
     return null;
@@ -42,6 +57,7 @@ export async function buildLoginUrl() {
     redirect_uri: spotifyConfig.redirectUri,
     code_challenge_method: "S256",
     code_challenge: challenge,
+    show_dialog: "true",
   });
 
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
@@ -72,7 +88,13 @@ export async function exchangeCodeForTokens(code: string) {
     accessToken: payload.access_token,
     refreshToken: payload.refresh_token,
     expiresAt: Date.now() + payload.expires_in * 1000,
+    scopes: parseScopeList(payload.scope),
   };
+
+  if (!hasRequiredScopes(tokens)) {
+    clearTokens();
+    throw new Error("Spotify did not grant all required permissions.");
+  }
 
   storeTokens(tokens);
   localStorage.removeItem(VERIFIER_KEY);
@@ -99,6 +121,7 @@ export async function refreshTokens(tokens: SpotifyTokens) {
     accessToken: payload.access_token,
     refreshToken: payload.refresh_token ?? tokens.refreshToken,
     expiresAt: Date.now() + payload.expires_in * 1000,
+    scopes: payload.scope ? parseScopeList(payload.scope) : tokens.scopes,
   };
 
   storeTokens(nextTokens);

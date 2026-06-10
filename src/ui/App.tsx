@@ -1,4 +1,5 @@
 import {
+  ChevronRight,
   ListPlus,
   Laptop,
   LogOut,
@@ -15,6 +16,7 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  Trash2,
   Volume2,
   X,
 } from "lucide-react";
@@ -28,6 +30,7 @@ import {
 } from "../spotify/auth";
 import {
   addToQueue,
+  addTracksToPlaylist,
   getDevices,
   getAllMyPlaylists,
   getMe,
@@ -45,6 +48,8 @@ import {
   PlaylistTrack,
   PlaybackState,
   QueueState,
+  removeSavedTracks,
+  removeTracksFromPlaylist,
   searchTracks,
   seekPlayback,
   setPlaybackVolume,
@@ -76,6 +81,7 @@ import { useAccent } from "./useAccent";
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
 type TrackMenuState = {
   track: SpotifyTrack;
+  sourcePlaylist?: PlaylistSummary | null;
   x: number;
   y: number;
 } | null;
@@ -174,6 +180,10 @@ export function App() {
   const progressPercent = duration ? (localProgress / duration) * 100 : 0;
   const profileImage = profile?.images?.[0]?.url;
   const nextQueueTracks = queueState?.queue.filter((item) => item?.uri).slice(0, 5) ?? [];
+  const targetPlaylists = useMemo(
+    () => playlists.filter((playlist) => playlist.kind === "playlist" && playlist.editable),
+    [playlists],
+  );
   const visiblePlaylistTracks = useMemo(() => {
     const normalizedQuery = playlistTrackQuery.trim().toLowerCase();
     if (!normalizedQuery) return playlistTracks;
@@ -274,8 +284,9 @@ export function App() {
     setStatus(nextPlayback?.device ? "Connected" : "Choose a Spotify device");
   }
 
-  async function loadPlaylists(nextTokens = tokens, force = false) {
+  async function loadPlaylists(nextTokens = tokens, force = false, profileOverride = profile) {
     if (!nextTokens || (!force && isLibraryRateLimited())) return;
+    const currentProfile = profileOverride;
     const loadVersion = playlistLoadVersion.current + 1;
     playlistLoadVersion.current = loadVersion;
     const hasCachedPlaylists = playlists.length > 0;
@@ -293,7 +304,7 @@ export function App() {
         id: "liked",
         name: "Liked Songs",
         description: "Saved tracks",
-        owner: profile?.display_name ?? "You",
+        owner: currentProfile?.display_name ?? "You",
         total: savedTracks?.total ?? 0,
         kind: "liked",
       };
@@ -307,9 +318,12 @@ export function App() {
           description: playlist.description,
           image: playlist.images?.[0]?.url,
           owner: playlist.owner?.display_name ?? playlist.owner?.id ?? "Unknown",
+          ownerId: playlist.owner?.id,
           total: playlist.tracks?.total ?? 0,
           snapshotId: playlist.snapshot_id,
           tracksHref: playlist.tracks?.href,
+          collaborative: Boolean(playlist.collaborative),
+          editable: playlist.owner?.id === currentProfile?.id || Boolean(playlist.collaborative),
           kind: "playlist" as const,
         })),
       ];
@@ -455,14 +469,15 @@ export function App() {
       .then(async (nextTokens) => {
         setTokens(nextTokens);
         window.history.replaceState({}, document.title, "/");
-        setProfile(await getMe(nextTokens));
-        await loadPlaylists(nextTokens);
+        const nextProfile = await getMe(nextTokens);
+        setProfile(nextProfile);
+        await loadPlaylists(nextTokens, false, nextProfile);
         await refreshState(nextTokens);
       })
       .catch((error) => {
         if (handleAuthExpired(error)) return;
         if (!handleLibraryRateLimit(error, "Spotify is rate limiting playlists. Login finished, waiting.")) {
-          setStatus("Login failed");
+          setStatus(error instanceof Error ? error.message : "Login failed");
         }
       });
   }, [tokens]);
@@ -471,15 +486,15 @@ export function App() {
     if (!tokens) return;
 
     let active = true;
-    getMe(tokens)
-      .then((nextProfile) => {
-        if (active) setProfile(nextProfile);
-      })
-      .catch((error) => {
-        if (!active || handleAuthExpired(error)) return;
-        if (!handleLibraryRateLimit(error)) setStatus(spotifyErrorMessage(error, "Profile unavailable"));
-      });
-    void loadPlaylists(tokens);
+    void (async () => {
+      const nextProfile = await getMe(tokens);
+      if (!active) return;
+      setProfile(nextProfile);
+      await loadPlaylists(tokens, false, nextProfile);
+    })().catch((error) => {
+      if (!active || handleAuthExpired(error)) return;
+      if (!handleLibraryRateLimit(error)) setStatus(spotifyErrorMessage(error, "Profile unavailable"));
+    });
 
     const poll = async () => {
       try {
@@ -664,13 +679,39 @@ export function App() {
     setView("now");
   }
 
-  function openTrackMenu(event: React.MouseEvent, trackToOpen: SpotifyTrack) {
+  function updatePlaylistAfterTrackChange(
+    playlist: PlaylistSummary,
+    nextTotal: number,
+    snapshotId?: string,
+  ) {
+    setSelectedPlaylist((current) =>
+      current?.kind === playlist.kind && current.id === playlist.id
+        ? { ...current, total: nextTotal, snapshotId: snapshotId ?? current.snapshotId }
+        : current,
+    );
+    setPlaylists((current) => {
+      const next = current.map((item) =>
+        item.kind === playlist.kind && item.id === playlist.id
+          ? { ...item, total: nextTotal, snapshotId: snapshotId ?? item.snapshotId }
+          : item,
+      );
+      saveCachedPlaylists(next);
+      return next;
+    });
+  }
+
+  function openTrackMenu(
+    event: React.MouseEvent,
+    trackToOpen: SpotifyTrack,
+    sourcePlaylist?: PlaylistSummary | null,
+  ) {
     event.preventDefault();
     event.stopPropagation();
     setTrackMenu({
       track: trackToOpen,
-      x: Math.min(event.clientX, window.innerWidth - 220),
-      y: Math.min(event.clientY, window.innerHeight - 120),
+      sourcePlaylist,
+      x: Math.max(12, Math.min(event.clientX, window.innerWidth - 540)),
+      y: Math.max(12, Math.min(event.clientY, window.innerHeight - 360)),
     });
   }
 
@@ -683,6 +724,64 @@ export function App() {
         setManualQueueUris((current) => [...current, trackToQueue.uri]);
       },
       `Added ${trackToQueue.name} to queue`,
+    );
+  }
+
+  function addTrackToPlaylist(trackToAdd: SpotifyTrack, playlist: PlaylistSummary) {
+    if (!tokens || !trackToAdd.uri) return;
+    setTrackMenu(null);
+    void run(
+      async () => {
+        const result = await addTracksToPlaylist(tokens, playlist.id, [trackToAdd.uri]);
+        const nextTotal = playlist.total + 1;
+        updatePlaylistAfterTrackChange(playlist, nextTotal, result.snapshot_id);
+        if (selectedPlaylist?.kind === "playlist" && selectedPlaylist.id === playlist.id) {
+          const nextTracks = [...playlistTracks, { track: trackToAdd }];
+          setPlaylistTracks(nextTracks);
+          saveCachedPlaylistTracks(
+            { ...playlist, total: nextTotal, snapshotId: result.snapshot_id },
+            nextTracks,
+            nextTotal,
+          );
+        }
+      },
+      `Added ${trackToAdd.name} to ${playlist.name}`,
+    );
+  }
+
+  function removeTrackFromSource(trackToRemove: SpotifyTrack, playlist: PlaylistSummary) {
+    if (!tokens || !trackToRemove.uri) return;
+    setTrackMenu(null);
+    void run(
+      async () => {
+        if (playlist.kind === "liked") {
+          await removeSavedTracks(tokens, [trackToRemove.id]);
+        } else {
+          const result = await removeTracksFromPlaylist(tokens, playlist.id, [trackToRemove.uri]);
+          playlist = { ...playlist, snapshotId: result.snapshot_id };
+        }
+
+        const removeOne = (items: PlaylistTrack[]) => {
+          let removed = false;
+          return items.filter((item) => {
+            if (removed || playlistTrack(item)?.uri !== trackToRemove.uri) return true;
+            removed = true;
+            return false;
+          });
+        };
+
+        const nextTracks =
+          selectedPlaylist?.kind === playlist.kind && selectedPlaylist.id === playlist.id
+            ? removeOne(playlistTracks)
+            : playlistTracks;
+        const nextTotal = Math.max(0, playlist.total - 1);
+        updatePlaylistAfterTrackChange(playlist, nextTotal, playlist.snapshotId);
+        if (nextTracks !== playlistTracks) {
+          setPlaylistTracks(nextTracks);
+          saveCachedPlaylistTracks({ ...playlist, total: nextTotal }, nextTracks, nextTotal);
+        }
+      },
+      `Removed ${trackToRemove.name} from ${playlist.name}`,
     );
   }
 
@@ -1050,7 +1149,7 @@ export function App() {
                         className="track-row"
                         key={`${savedTrack.uri}-${trackIndex}`}
                         onClick={() => playPlaylistTrack(savedTrack, trackIndex)}
-                        onContextMenu={(event) => openTrackMenu(event, savedTrack)}
+                        onContextMenu={(event) => openTrackMenu(event, savedTrack, selectedPlaylist)}
                         disabled={busy}
                       >
                         <span>{trackIndex + 1}</span>
@@ -1398,10 +1497,44 @@ export function App() {
           style={{ left: trackMenu.x, top: trackMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
+          <div className="track-context-group has-submenu">
+            <button disabled={targetPlaylists.length === 0 || busy}>
+              <ListPlus size={16} />
+              Add to playlist
+              <ChevronRight size={16} />
+            </button>
+            <div className="track-context-submenu">
+              {targetPlaylists.length > 0 ? (
+                targetPlaylists.map((playlist) => (
+                  <button
+                    key={playlist.id}
+                    onClick={() => addTrackToPlaylist(trackMenu.track, playlist)}
+                    disabled={busy}
+                  >
+                    {playlist.name}
+                  </button>
+                ))
+              ) : (
+                <span>No editable playlists</span>
+              )}
+            </div>
+          </div>
           <button onClick={() => queueTrack(trackMenu.track)} disabled={busy}>
             <ListPlus size={16} />
             Add to queue
           </button>
+          {trackMenu.sourcePlaylist &&
+            (trackMenu.sourcePlaylist.kind === "liked" || trackMenu.sourcePlaylist.editable) && (
+              <button
+                onClick={() => removeTrackFromSource(trackMenu.track, trackMenu.sourcePlaylist!)}
+                disabled={busy}
+              >
+                <Trash2 size={16} />
+                {trackMenu.sourcePlaylist.kind === "liked"
+                  ? "Remove from your Liked Songs"
+                  : "Remove from this playlist"}
+              </button>
+            )}
         </div>
       )}
     </main>

@@ -28,7 +28,21 @@ export function isSpotifyAuthError(error: unknown): error is SpotifyAuthError {
   return error instanceof SpotifyAuthError;
 }
 
-async function parseSpotifyResponse<T>(response: Response): Promise<T> {
+export class SpotifyForbiddenError extends Error {
+  requestLabel: string;
+
+  constructor(message: string, requestLabel: string) {
+    super(message);
+    this.name = "SpotifyForbiddenError";
+    this.requestLabel = requestLabel;
+  }
+}
+
+export function isSpotifyForbiddenError(error: unknown): error is SpotifyForbiddenError {
+  return error instanceof SpotifyForbiddenError;
+}
+
+async function parseSpotifyResponse<T>(response: Response, requestLabel: string): Promise<T> {
   if (response.status === 204) return undefined as T;
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -55,8 +69,12 @@ async function parseSpotifyResponse<T>(response: Response): Promise<T> {
       }
     }
 
-    if (response.status === 403 && (!message || message === "Forbidden")) {
-      message = "Playlist access denied. Sign out and connect Spotify again.";
+    if (response.status === 403) {
+      message =
+        !message || message === "Forbidden"
+          ? `Spotify denied access to ${requestLabel}.`
+          : `${message} (${requestLabel})`;
+      throw new SpotifyForbiddenError(message, requestLabel);
     }
 
     throw new Error(message || `Spotify request failed: ${response.status}`);
@@ -85,7 +103,7 @@ export async function spotifyFetch<T>(
     },
   });
 
-  return parseSpotifyResponse<T>(response);
+  return parseSpotifyResponse<T>(response, path);
 }
 
 export async function spotifyFetchUrl<T>(
@@ -105,7 +123,7 @@ export async function spotifyFetchUrl<T>(
     },
   });
 
-  return parseSpotifyResponse<T>(response);
+  return parseSpotifyResponse<T>(response, new URL(url).pathname);
 }
 
 async function refreshSpotifyTokens(tokens: SpotifyTokens) {
@@ -152,6 +170,8 @@ export type SpotifyPlaylist = {
   description: string | null;
   images: SpotifyImage[] | null;
   owner: { display_name: string | null; id: string };
+  collaborative?: boolean;
+  public?: boolean | null;
   snapshot_id?: string;
   tracks: { total: number; href?: string };
 };
@@ -163,9 +183,12 @@ export type PlaylistSummary = {
   description?: string | null;
   image?: string;
   owner: string;
+  ownerId?: string;
   total: number;
   snapshotId?: string;
   tracksHref?: string;
+  collaborative?: boolean;
+  editable?: boolean;
   kind: "liked" | "playlist";
 };
 
@@ -252,6 +275,31 @@ export async function addToQueue(tokens: SpotifyTokens, uri: string) {
   });
 }
 
+export async function addTracksToPlaylist(tokens: SpotifyTokens, playlistId: string, uris: string[]) {
+  return spotifyFetch<{ snapshot_id: string }>(`/playlists/${playlistId}/tracks`, tokens, {
+    method: "POST",
+    body: JSON.stringify({ uris }),
+  });
+}
+
+export async function removeTracksFromPlaylist(
+  tokens: SpotifyTokens,
+  playlistId: string,
+  uris: string[],
+) {
+  return spotifyFetch<{ snapshot_id: string }>(`/playlists/${playlistId}/tracks`, tokens, {
+    method: "DELETE",
+    body: JSON.stringify({ tracks: uris.map((uri) => ({ uri })) }),
+  });
+}
+
+export async function removeSavedTracks(tokens: SpotifyTokens, ids: string[]) {
+  const params = new URLSearchParams({ ids: ids.join(",") });
+  return spotifyFetch<void>(`/me/tracks?${params.toString()}`, tokens, {
+    method: "DELETE",
+  });
+}
+
 export async function getMyPlaylists(tokens: SpotifyTokens, limit = 50, offset = 0) {
   const params = new URLSearchParams({
     limit: String(limit),
@@ -282,10 +330,23 @@ export async function getPlaylistTracks(
     limit: String(limit),
     offset: String(offset),
   });
-  return spotifyFetch<Paging<PlaylistTrack>>(
-    `/playlists/${playlistId}/items?${params.toString()}`,
-    tokens,
-  );
+  const tracksPath = `/playlists/${playlistId}/tracks?${params.toString()}`;
+  const itemsPath = `/playlists/${playlistId}/items?${params.toString()}`;
+
+  try {
+    return await spotifyFetch<Paging<PlaylistTrack>>(tracksPath, tokens);
+  } catch (error) {
+    if (!isSpotifyForbiddenError(error)) throw error;
+    try {
+      return await spotifyFetch<Paging<PlaylistTrack>>(itemsPath, tokens);
+    } catch (fallbackError) {
+      if (!isSpotifyForbiddenError(fallbackError)) throw fallbackError;
+      throw new SpotifyForbiddenError(
+        `Spotify denied access to playlist tracks through ${tracksPath} and ${itemsPath}.`,
+        tracksPath,
+      );
+    }
+  }
 }
 
 export async function getPlaylistTracksByHref(
@@ -295,13 +356,33 @@ export async function getPlaylistTracksByHref(
   offset = 0,
 ) {
   const url = new URL(href);
-  if (url.pathname.endsWith("/tracks")) {
-    url.pathname = url.pathname.replace(/\/tracks$/, "/items");
-  }
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("offset", String(offset));
 
-  return spotifyFetchUrl<Paging<PlaylistTrack>>(url.toString(), tokens);
+  try {
+    return await spotifyFetchUrl<Paging<PlaylistTrack>>(url.toString(), tokens);
+  } catch (error) {
+    if (!isSpotifyForbiddenError(error)) throw error;
+
+    const fallbackUrl = new URL(url.toString());
+    if (fallbackUrl.pathname.endsWith("/tracks")) {
+      fallbackUrl.pathname = fallbackUrl.pathname.replace(/\/tracks$/, "/items");
+    } else if (fallbackUrl.pathname.endsWith("/items")) {
+      fallbackUrl.pathname = fallbackUrl.pathname.replace(/\/items$/, "/tracks");
+    } else {
+      throw error;
+    }
+
+    try {
+      return await spotifyFetchUrl<Paging<PlaylistTrack>>(fallbackUrl.toString(), tokens);
+    } catch (fallbackError) {
+      if (!isSpotifyForbiddenError(fallbackError)) throw fallbackError;
+      throw new SpotifyForbiddenError(
+        `Spotify denied access to playlist tracks through ${url.pathname} and ${fallbackUrl.pathname}.`,
+        url.pathname,
+      );
+    }
+  }
 }
 
 export async function transferPlayback(
