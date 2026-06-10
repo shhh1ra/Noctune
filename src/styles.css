@@ -883,14 +883,14 @@ input {
 .playlist-hero p {
   margin: 0 0 6px;
   color: rgba(255, 255, 255, 0.56);
-  font-size: 13px;
+  font-size: 18px;
 }
 
 .section-heading h2,
 .playlist-hero h2 {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 42px;
+  font-size: 50px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -1036,6 +1036,7 @@ input {
 .playlist-title-row .hero-action {
   flex: 0 0 auto;
   margin-top: 0;
+  transform: translateY(5px);
 }
 
 .playlist-play {
