@@ -245,6 +245,13 @@ export async function getQueue(tokens: SpotifyTokens) {
   return spotifyFetch<QueueState>("/me/player/queue", tokens);
 }
 
+export async function addToQueue(tokens: SpotifyTokens, uri: string) {
+  const params = new URLSearchParams({ uri });
+  return spotifyFetch<void>(`/me/player/queue?${params.toString()}`, tokens, {
+    method: "POST",
+  });
+}
+
 export async function getMyPlaylists(tokens: SpotifyTokens, limit = 50, offset = 0) {
   const params = new URLSearchParams({
     limit: String(limit),

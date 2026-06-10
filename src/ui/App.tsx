@@ -1,4 +1,5 @@
 import {
+  ListPlus,
   Laptop,
   LogOut,
   ListMusic,
@@ -26,6 +27,7 @@ import {
   SpotifyTokens,
 } from "../spotify/auth";
 import {
+  addToQueue,
   getDevices,
   getAllMyPlaylists,
   getMe,
@@ -72,6 +74,11 @@ import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { useAccent } from "./useAccent";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
+type TrackMenuState = {
+  track: SpotifyTrack;
+  x: number;
+  y: number;
+} | null;
 
 function formatTime(ms = 0) {
   const seconds = Math.floor(ms / 1000);
@@ -130,6 +137,8 @@ export function App() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authExpiredOpen, setAuthExpiredOpen] = useState(false);
+  const [trackMenu, setTrackMenu] = useState<TrackMenuState>(null);
+  const [manualQueueUris, setManualQueueUris] = useState<string[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
   const [localProgress, setLocalProgress] = useState(0);
   const playlistLoadVersion = useRef(0);
@@ -573,6 +582,22 @@ export function App() {
     };
   }, [query, tokens]);
 
+  useEffect(() => {
+    if (!trackMenu) return;
+
+    const close = () => setTrackMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [trackMenu]);
+
   async function login() {
     if (!spotifyConfig.clientId) {
       setStatus("Add Spotify client id to .env");
@@ -628,6 +653,28 @@ export function App() {
       `Playing ${trackToPlay.name}`,
     );
     setView("now");
+  }
+
+  function openTrackMenu(event: React.MouseEvent, trackToOpen: SpotifyTrack) {
+    event.preventDefault();
+    event.stopPropagation();
+    setTrackMenu({
+      track: trackToOpen,
+      x: Math.min(event.clientX, window.innerWidth - 220),
+      y: Math.min(event.clientY, window.innerHeight - 120),
+    });
+  }
+
+  function queueTrack(trackToQueue: SpotifyTrack) {
+    if (!tokens || !trackToQueue.uri) return;
+    setTrackMenu(null);
+    void run(
+      async () => {
+        await addToQueue(tokens, trackToQueue.uri);
+        setManualQueueUris((current) => [...current, trackToQueue.uri]);
+      },
+      `Added ${trackToQueue.name} to queue`,
+    );
   }
 
   function playQueueItem(queueTrack: SpotifyTrack, index: number) {
@@ -803,7 +850,12 @@ export function App() {
                     {bestImage(queueTrack) ? <img src={bestImage(queueTrack)} alt="" /> : <i />}
                     <span>
                       <strong>{queueTrack.name}</strong>
-                      <small>{queueTrack.artists.map((artist) => artist.name).join(", ")}</small>
+                      <small>
+                        {manualQueueUris.includes(queueTrack.uri) && (
+                          <ListPlus className="queue-source-icon" size={13} />
+                        )}
+                        {queueTrack.artists.map((artist) => artist.name).join(", ")}
+                      </small>
                     </span>
                   </button>
                 ))
@@ -988,6 +1040,7 @@ export function App() {
                         className="track-row"
                         key={`${savedTrack.uri}-${trackIndex}`}
                         onClick={() => playPlaylistTrack(savedTrack, trackIndex)}
+                        onContextMenu={(event) => openTrackMenu(event, savedTrack)}
                         disabled={busy}
                       >
                         <span>{trackIndex + 1}</span>
@@ -1034,6 +1087,7 @@ export function App() {
                     className="result"
                     key={result.uri}
                     onClick={() => play(result)}
+                    onContextMenu={(event) => openTrackMenu(event, result)}
                     disabled={busy}
                   >
                     {bestImage(result) ? <img src={bestImage(result)} alt="" /> : <span />}
@@ -1256,6 +1310,19 @@ export function App() {
               Connect Spotify
             </button>
           </section>
+        </div>
+      )}
+
+      {trackMenu && (
+        <div
+          className="track-context-menu"
+          style={{ left: trackMenu.x, top: trackMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button onClick={() => queueTrack(trackMenu.track)} disabled={busy}>
+            <ListPlus size={16} />
+            Add to queue
+          </button>
         </div>
       )}
     </main>
