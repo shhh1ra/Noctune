@@ -180,6 +180,10 @@ export type PlaybackState = {
   shuffle_state?: boolean;
   item: SpotifyTrack | null;
   device: SpotifyDevice | null;
+  context?: {
+    type?: string;
+    uri?: string;
+  } | null;
 };
 
 export type QueueState = {

@@ -552,13 +552,13 @@ export function App() {
     resetSession(true);
   }
 
-  async function run(action: () => Promise<void>, message = "Updating playback") {
+  async function run(action: () => Promise<void>, message = "Updating playback", refreshAfter = true) {
     if (!tokens) return;
     setBusy(true);
     setStatus(message);
     try {
       await action();
-      await refreshState(tokens);
+      if (refreshAfter) await refreshState(tokens);
     } catch (error) {
       if (handleAuthExpired(error)) return;
       setStatus(error instanceof Error ? error.message : "Spotify command failed");
@@ -595,15 +595,15 @@ export function App() {
     setView("now");
   }
 
-  function playQueueItem(index: number) {
-    if (!tokens || !playback) return;
+  function playQueueItem(queueTrack: SpotifyTrack, index: number) {
+    if (!tokens || !queueTrack.uri) return;
     void run(
       async () => {
         for (let step = 0; step <= index; step += 1) {
           await skipNext(tokens);
         }
       },
-      "Moving through queue",
+      `Playing ${queueTrack.name}`,
     );
     setView("now");
   }
@@ -762,7 +762,7 @@ export function App() {
                   <button
                     className="queue-preview-row"
                     key={`${queueTrack.uri}-${index}`}
-                    onClick={() => playQueueItem(index)}
+                    onClick={() => playQueueItem(queueTrack, index)}
                     disabled={busy}
                   >
                     {bestImage(queueTrack) ? <img src={bestImage(queueTrack)} alt="" /> : <i />}
