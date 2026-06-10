@@ -62,8 +62,11 @@ import {
   cachedTrackImage,
   clearUiCache,
   loadCachedPlaylists,
+  loadCachedPlaylistTracks,
+  mergeCachedPlaylistMetadata,
   rememberTrackImages,
   saveCachedPlaylists,
+  saveCachedPlaylistTracks,
 } from "./cache";
 import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { useAccent } from "./useAccent";
@@ -287,13 +290,15 @@ export function App() {
           image: playlist.images?.[0]?.url,
           owner: playlist.owner?.display_name ?? playlist.owner?.id ?? "Unknown",
           total: playlist.tracks?.total ?? 0,
+          snapshotId: playlist.snapshot_id,
           tracksHref: playlist.tracks?.href,
           kind: "playlist" as const,
         })),
       ];
+      const mergedPlaylists = mergeCachedPlaylistMetadata(nextPlaylists);
 
-      setPlaylists(nextPlaylists);
-      saveCachedPlaylists(nextPlaylists);
+      setPlaylists(mergedPlaylists);
+      saveCachedPlaylists(mergedPlaylists);
     } catch (error) {
       if (handleAuthExpired(error)) return;
       if (handleLibraryRateLimit(error)) return;
@@ -321,9 +326,20 @@ export function App() {
     setPlaylistOffset(0);
     setPlaylistHasMore(false);
     try {
-      const response = await loadPlaylistTrackPage(playlist, 0);
-      const items = response?.items ?? [];
-      const total = response?.total ?? playlist.total;
+      const cachedTracks = loadCachedPlaylistTracks(playlist);
+      if (cachedTracks) {
+        setSelectedPlaylist((current) =>
+          current ? { ...current, total: cachedTracks.total } : current,
+        );
+        setPlaylistTracks(cachedTracks.items);
+        setPlaylistOffset(cachedTracks.items.length);
+        setPlaylistHasMore(false);
+        rememberTrackImages(cachedTracks.items.map((item) => playlistTrack(item)));
+        setLoadingPlaylists(false);
+        return;
+      }
+
+      const { items, total } = await loadAllPlaylistTracks(playlist);
       setSelectedPlaylist((current) => (current ? { ...current, total } : current));
       setPlaylists((current) =>
         {
@@ -334,11 +350,11 @@ export function App() {
           return next;
         },
       );
-      const playableItems = items.filter((item) => playlistTrack(item)?.uri);
-      rememberTrackImages(playableItems.map((item) => playlistTrack(item)));
-      setPlaylistTracks(playableItems);
+      rememberTrackImages(items.map((item) => playlistTrack(item)));
+      setPlaylistTracks(items);
       setPlaylistOffset(items.length);
-      setPlaylistHasMore(Boolean(response?.next));
+      setPlaylistHasMore(false);
+      saveCachedPlaylistTracks(playlist, items, total);
     } catch (error) {
       if (handleAuthExpired(error)) return;
       setStatus(playlistStatusMessage(error, "Playlist tracks unavailable"));
@@ -358,6 +374,25 @@ export function App() {
     }
 
     return getPlaylistTracks(tokens!, playlist.id, 50, offset);
+  }
+
+  async function loadAllPlaylistTracks(playlist: PlaylistSummary) {
+    const allItems: PlaylistTrack[] = [];
+    let offset = 0;
+    let total = playlist.total;
+    let hasNext = true;
+
+    while (hasNext) {
+      const response = await loadPlaylistTrackPage(playlist, offset);
+      const pageItems = response?.items ?? [];
+      const playableItems = pageItems.filter((item) => playlistTrack(item)?.uri);
+      allItems.push(...playableItems);
+      total = response?.total ?? total;
+      offset += pageItems.length;
+      hasNext = Boolean(response?.next) && pageItems.length > 0;
+    }
+
+    return { items: allItems, total };
   }
 
   async function loadMorePlaylistTracks() {

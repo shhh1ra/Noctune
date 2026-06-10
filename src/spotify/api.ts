@@ -152,6 +152,7 @@ export type SpotifyPlaylist = {
   description: string | null;
   images: SpotifyImage[] | null;
   owner: { display_name: string | null; id: string };
+  snapshot_id?: string;
   tracks: { total: number; href?: string };
 };
 
@@ -163,6 +164,7 @@ export type PlaylistSummary = {
   image?: string;
   owner: string;
   total: number;
+  snapshotId?: string;
   tracksHref?: string;
   kind: "liked" | "playlist";
 };
