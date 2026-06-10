@@ -2,6 +2,21 @@ import { SpotifyTokens, refreshTokens } from "./auth";
 
 const API_ROOT = "https://api.spotify.com/v1";
 
+export class SpotifyRateLimitError extends Error {
+  retryAfterMs: number;
+
+  constructor(retryAfterMs: number) {
+    const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+    super(`Spotify rate limit active. Retrying in ${seconds}s.`);
+    this.name = "SpotifyRateLimitError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export function isSpotifyRateLimitError(error: unknown): error is SpotifyRateLimitError {
+  return error instanceof SpotifyRateLimitError;
+}
+
 async function parseSpotifyResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
 
@@ -9,6 +24,11 @@ async function parseSpotifyResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get("retry-after") ?? "60");
+      throw new SpotifyRateLimitError(Math.max(1, retryAfter) * 1000);
+    }
+
     let message = text;
 
     if (contentType.includes("application/json") && text) {

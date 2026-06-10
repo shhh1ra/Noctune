@@ -300,6 +300,13 @@ input {
   color: rgba(255, 255, 255, 0.48);
 }
 
+.playlist-search {
+  width: min(520px, 100%);
+  min-height: 44px;
+  margin-top: 2px;
+  background: rgba(255, 255, 255, 0.075);
+}
+
 .results,
 .devices-view {
   gap: 10px;

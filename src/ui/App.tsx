@@ -30,6 +30,7 @@ import {
   getPlaylistTracksByHref,
   getPlayback,
   getSavedTracks,
+  isSpotifyRateLimitError,
   playContext,
   playTrack,
   playTracks,
@@ -51,6 +52,13 @@ import {
 } from "../spotify/api";
 import { createWebPlaybackDevice, WebPlaybackDevice } from "../spotify/webPlayback";
 import { spotifyConfig } from "../spotify/config";
+import {
+  cachedTrackImage,
+  clearUiCache,
+  loadCachedPlaylists,
+  rememberTrackImages,
+  saveCachedPlaylists,
+} from "./cache";
 import { useAccent } from "./useAccent";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
@@ -62,7 +70,7 @@ function formatTime(ms = 0) {
 }
 
 function bestImage(track?: SpotifyTrack | null) {
-  return track?.album.images?.[0]?.url;
+  return cachedTrackImage(track);
 }
 
 function playlistImage(playlist: PlaylistSummary) {
@@ -93,9 +101,10 @@ export function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SpotifyTrack[]>([]);
   const [searching, setSearching] = useState(false);
-  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
+  const [playlists, setPlaylists] = useState<PlaylistSummary[]>(() => loadCachedPlaylists());
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSummary | null>(null);
   const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrack[]>([]);
+  const [playlistTrackQuery, setPlaylistTrackQuery] = useState("");
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [loadingMoreTracks, setLoadingMoreTracks] = useState(false);
   const [playlistHasMore, setPlaylistHasMore] = useState(false);
@@ -105,6 +114,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
   const playlistLoadVersion = useRef(0);
+  const rateLimitUntil = useRef(0);
 
   const track = playback?.item ?? null;
   const cover = bestImage(track);
@@ -120,9 +130,43 @@ export function App() {
   const volume = playback?.device?.volume_percent ?? localVolume;
   const duration = track?.duration_ms ?? 0;
   const progressPercent = duration ? (localProgress / duration) * 100 : 0;
+  const visiblePlaylistTracks = useMemo(() => {
+    const normalizedQuery = playlistTrackQuery.trim().toLowerCase();
+    if (!normalizedQuery) return playlistTracks;
+
+    return playlistTracks.filter((item) => {
+      const itemTrack = playlistTrack(item);
+      if (!itemTrack) return false;
+
+      const haystack = [
+        itemTrack.name,
+        itemTrack.album.name,
+        ...itemTrack.artists.map((artist) => artist.name),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [playlistTrackQuery, playlistTracks]);
+
+  function isRateLimited() {
+    return Date.now() < rateLimitUntil.current;
+  }
+
+  function handleRateLimit(error: unknown, fallback = "Spotify is rate limiting. Using cached data.") {
+    if (!isSpotifyRateLimitError(error)) return false;
+
+    rateLimitUntil.current = Math.max(
+      rateLimitUntil.current,
+      Date.now() + error.retryAfterMs,
+    );
+    setStatus(fallback);
+    return true;
+  }
 
   async function refreshState(nextTokens = tokens) {
-    if (!nextTokens) return;
+    if (!nextTokens || isRateLimited()) return;
     const [nextPlayback, nextDevices] = await Promise.all([
       getPlayback(nextTokens),
       getDevices(nextTokens),
@@ -130,6 +174,7 @@ export function App() {
     setPlayback(nextPlayback ?? null);
     setDevices(nextDevices.devices);
     setLocalProgress(nextPlayback?.progress_ms ?? 0);
+    rememberTrackImages([nextPlayback?.item]);
     if (nextPlayback?.device?.volume_percent !== null && nextPlayback?.device?.volume_percent !== undefined) {
       setLocalVolume(nextPlayback.device.volume_percent);
     }
@@ -137,10 +182,11 @@ export function App() {
   }
 
   async function loadPlaylists(nextTokens = tokens) {
-    if (!nextTokens) return;
+    if (!nextTokens || isRateLimited()) return;
     const loadVersion = playlistLoadVersion.current + 1;
     playlistLoadVersion.current = loadVersion;
-    setLoadingPlaylists(true);
+    const hasCachedPlaylists = playlists.length > 0;
+    setLoadingPlaylists(!hasCachedPlaylists);
     try {
       const [savedTracks, myPlaylists] = await Promise.all([
         getSavedTracks(nextTokens, 1),
@@ -175,43 +221,20 @@ export function App() {
       ];
 
       setPlaylists(nextPlaylists);
-      void refreshPlaylistTotals(nextPlaylists, nextTokens, loadVersion);
+      saveCachedPlaylists(nextPlaylists);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Playlists unavailable");
+      if (handleRateLimit(error)) return;
+      setStatus(
+        playlists.length > 0
+          ? "Spotify is rate limiting. Using cached library."
+          : error instanceof Error
+            ? error.message
+            : "Playlists unavailable",
+      );
     } finally {
       if (playlistLoadVersion.current === loadVersion) {
         setLoadingPlaylists(false);
       }
-    }
-  }
-
-  async function refreshPlaylistTotals(
-    nextPlaylists: PlaylistSummary[],
-    nextTokens: SpotifyTokens,
-    loadVersion = playlistLoadVersion.current,
-  ) {
-    const remotePlaylists = nextPlaylists.filter((playlist) => playlist.kind === "playlist");
-
-    for (const playlist of remotePlaylists) {
-      if (playlistLoadVersion.current !== loadVersion) return;
-
-      let total = playlist.total;
-      try {
-        const response = playlist.tracksHref
-          ? await getPlaylistTracksByHref(nextTokens, playlist.tracksHref, 50, 0)
-          : await getPlaylistTracks(nextTokens, playlist.id, 50, 0);
-        total = response?.total ?? playlist.total;
-      } catch {
-        continue;
-      }
-
-      if (playlistLoadVersion.current !== loadVersion) return;
-
-      setPlaylists((current) =>
-        current.map((item) =>
-          item.kind === playlist.kind && item.id === playlist.id ? { ...item, total } : item,
-        ),
-      );
     }
   }
 
@@ -221,6 +244,7 @@ export function App() {
     setView("playlists");
     setLoadingPlaylists(true);
     setPlaylistScrolled(false);
+    setPlaylistTrackQuery("");
     setPlaylistOffset(0);
     setPlaylistHasMore(false);
     try {
@@ -229,11 +253,17 @@ export function App() {
       const total = response?.total ?? playlist.total;
       setSelectedPlaylist((current) => (current ? { ...current, total } : current));
       setPlaylists((current) =>
-        current.map((item) =>
-          item.kind === playlist.kind && item.id === playlist.id ? { ...item, total } : item,
-        ),
+        {
+          const next = current.map((item) =>
+            item.kind === playlist.kind && item.id === playlist.id ? { ...item, total } : item,
+          );
+          saveCachedPlaylists(next);
+          return next;
+        },
       );
-      setPlaylistTracks(items.filter((item) => playlistTrack(item)?.uri));
+      const playableItems = items.filter((item) => playlistTrack(item)?.uri);
+      rememberTrackImages(playableItems.map((item) => playlistTrack(item)));
+      setPlaylistTracks(playableItems);
       setPlaylistOffset(items.length);
       setPlaylistHasMore(Boolean(response?.next));
     } catch (error) {
@@ -265,9 +295,11 @@ export function App() {
     try {
       const response = await loadPlaylistTrackPage(selectedPlaylist, playlistOffset);
       const items = response?.items ?? [];
+      const playableItems = items.filter((item) => playlistTrack(item)?.uri);
+      rememberTrackImages(playableItems.map((item) => playlistTrack(item)));
       setPlaylistTracks((current) => [
         ...current,
-        ...items.filter((item) => playlistTrack(item)?.uri),
+        ...playableItems,
       ]);
       setPlaylistOffset((current) => current + items.length);
       setPlaylistHasMore(Boolean(response?.next));
@@ -299,7 +331,11 @@ export function App() {
         await loadPlaylists(nextTokens);
         await refreshState(nextTokens);
       })
-      .catch(() => setStatus("Login failed"));
+      .catch((error) => {
+        if (!handleRateLimit(error, "Spotify is rate limiting. Login finished, waiting.")) {
+          setStatus("Login failed");
+        }
+      });
   }, [tokens]);
 
   useEffect(() => {
@@ -310,7 +346,9 @@ export function App() {
       .then((nextProfile) => {
         if (active) setProfile(nextProfile);
       })
-      .catch(() => setStatus("Profile unavailable"));
+      .catch((error) => {
+        if (active && !handleRateLimit(error)) setStatus("Profile unavailable");
+      });
     void loadPlaylists(tokens);
 
     const poll = async () => {
@@ -318,25 +356,18 @@ export function App() {
         await refreshState(tokens);
       } catch (error) {
         if (!active) return;
+        if (handleRateLimit(error)) return;
         setStatus(error instanceof Error ? error.message : "Waiting for Spotify");
       }
     };
 
     poll();
-    const timer = window.setInterval(poll, 5000);
+    const timer = window.setInterval(poll, 15000);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
   }, [tokens]);
-
-  useEffect(() => {
-    if (view !== "playlists" || selectedPlaylist || !tokens || playlists.length === 0) {
-      return;
-    }
-
-    void refreshPlaylistTotals(playlists, tokens);
-  }, [view, selectedPlaylist, tokens, playlists.length]);
 
   useEffect(() => {
     if (!playback?.is_playing || !duration) return;
@@ -373,6 +404,16 @@ export function App() {
           is_active: true,
         },
       }));
+      rememberTrackImages([
+        {
+          id: current.id,
+          name: current.name,
+          uri: current.uri,
+          duration_ms: state.duration,
+          album: current.album,
+          artists: current.artists,
+        },
+      ]);
       setLocalProgress(state.position);
     })
       .then((device) => {
@@ -388,16 +429,23 @@ export function App() {
       setSearching(false);
       return;
     }
+    if (isRateLimited()) {
+      setSearching(false);
+      return;
+    }
 
     let active = true;
     setSearching(true);
     const timer = window.setTimeout(() => {
       searchTracks(tokens, query.trim())
         .then((response) => {
-          if (active) setResults(response.tracks.items);
+          if (active) {
+            rememberTrackImages(response.tracks.items);
+            setResults(response.tracks.items);
+          }
         })
-        .catch(() => {
-          if (active) setStatus("Search unavailable");
+        .catch((error) => {
+          if (active && !handleRateLimit(error)) setStatus("Search unavailable");
         })
         .finally(() => {
           if (active) setSearching(false);
@@ -580,6 +628,7 @@ export function App() {
           onClick={() => {
             setView("playlists");
             setSelectedPlaylist(null);
+            setPlaylistTrackQuery("");
           }}
         >
           <Rows3 size={20} />
@@ -614,8 +663,10 @@ export function App() {
                 setDevices([]);
                 setWebDevice(null);
                 setPlaylists([]);
+                clearUiCache();
                 setSelectedPlaylist(null);
                 setPlaylistTracks([]);
+                setPlaylistTrackQuery("");
               }}
             >
               Sign out
@@ -679,7 +730,7 @@ export function App() {
                       }
                       key={`${playlist.kind}-${playlist.id}`}
                       onClick={() => void openPlaylist(playlist)}
-                      disabled={loadingPlaylists}
+                      disabled={loadingPlaylists && playlists.length === 0}
                     >
                       {playlistImage(playlist) ? (
                         <img src={playlistImage(playlist)} alt="" />
@@ -722,7 +773,13 @@ export function App() {
                     </span>
                   )}
                   <div>
-                    <button className="text-button" onClick={() => setSelectedPlaylist(null)}>
+                    <button
+                      className="text-button"
+                      onClick={() => {
+                        setSelectedPlaylist(null);
+                        setPlaylistTrackQuery("");
+                      }}
+                    >
                       Back to playlists
                     </button>
                     <p>{selectedPlaylist.kind === "liked" ? "Saved tracks" : "Playlist"}</p>
@@ -742,17 +799,29 @@ export function App() {
                     </small>
                   </div>
                 </div>
+                <label className="search-box playlist-search">
+                  <Search size={18} />
+                  <input
+                    value={playlistTrackQuery}
+                    onChange={(event) => setPlaylistTrackQuery(event.target.value)}
+                    placeholder="Search in this playlist"
+                    disabled={playlistTracks.length === 0}
+                  />
+                </label>
                 <div className="track-list">
-                  {playlistTracks.map((item, index) => {
+                  {visiblePlaylistTracks.map((item) => {
                     const savedTrack = playlistTrack(item);
+                    const trackIndex = playlistTracks.findIndex(
+                      (candidate) => playlistTrack(candidate)?.uri === savedTrack?.uri,
+                    );
                     return savedTrack ? (
                       <button
                         className="track-row"
-                        key={`${savedTrack.uri}-${index}`}
-                        onClick={() => playPlaylistTrack(savedTrack, index)}
+                        key={`${savedTrack.uri}-${trackIndex}`}
+                        onClick={() => playPlaylistTrack(savedTrack, trackIndex)}
                         disabled={busy}
                       >
-                        <span>{index + 1}</span>
+                        <span>{trackIndex + 1}</span>
                         {bestImage(savedTrack) ? <img src={bestImage(savedTrack)} alt="" /> : <i />}
                         <span>
                           <strong>{savedTrack.name}</strong>
@@ -768,6 +837,9 @@ export function App() {
                   {!loadingPlaylists && playlistTracks.length === 0 && (
                     <p className="empty">No playable tracks here</p>
                   )}
+                  {!loadingPlaylists && playlistTracks.length > 0 && visiblePlaylistTracks.length === 0 && (
+                    <p className="empty">No tracks match this search</p>
+                  )}
                 </div>
               </div>
             )}
@@ -781,7 +853,7 @@ export function App() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search tracks"
+                placeholder="Search Spotify tracks"
                 disabled={!signedIn}
               />
             </label>
