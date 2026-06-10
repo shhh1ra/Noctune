@@ -116,6 +116,10 @@ input:disabled {
 .result,
 .search-box,
 .player,
+.queue-preview-row,
+.profile-pill,
+.profile-menu,
+.profile-menu button,
 input {
   -webkit-app-region: no-drag;
 }
@@ -140,13 +144,159 @@ input {
 }
 
 .rail-footer {
+  display: grid;
+  gap: 12px;
   margin-top: auto;
 }
 
-.rail-footer p {
-  margin: 0 0 10px;
+.queue-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.queue-preview-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   color: rgba(255, 255, 255, 0.58);
   font-size: 13px;
+}
+
+.queue-preview-title span {
+  font-weight: 720;
+}
+
+.queue-preview-title small {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.queue-preview-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 4px;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+}
+
+.queue-preview-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.queue-preview-row img,
+.queue-preview-row i {
+  width: 34px;
+  height: 34px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--accent-muted);
+}
+
+.queue-preview-row span {
+  min-width: 0;
+}
+
+.queue-preview-row strong,
+.queue-preview-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-preview-row strong {
+  font-size: 12px;
+}
+
+.queue-preview-row small,
+.queue-empty {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+}
+
+.queue-empty {
+  margin: 0;
+}
+
+.profile-menu-wrap {
+  position: relative;
+}
+
+.profile-pill {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  text-align: left;
+}
+
+.profile-pill:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.profile-pill img,
+.profile-pill > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent-muted);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.profile-pill strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.profile-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 10;
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(20, 22, 24, 0.96);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.profile-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  text-align: left;
+}
+
+.profile-menu button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
 }
 
 .primary,

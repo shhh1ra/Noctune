@@ -1,5 +1,6 @@
 import {
   Laptop,
+  LogOut,
   ListMusic,
   LogIn,
   Mic2,
@@ -9,6 +10,7 @@ import {
   Rows3,
   Repeat,
   Search,
+  Settings,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -29,6 +31,7 @@ import {
   getPlaylistTracks,
   getPlaylistTracksByHref,
   getPlayback,
+  getQueue,
   getSavedTracks,
   isSpotifyRateLimitError,
   playContext,
@@ -37,6 +40,7 @@ import {
   PlaylistSummary,
   PlaylistTrack,
   PlaybackState,
+  QueueState,
   searchTracks,
   seekPlayback,
   setPlaybackVolume,
@@ -90,10 +94,15 @@ function playlistStatusMessage(error: unknown, fallback: string) {
   return error.message;
 }
 
+function profileInitial(profile?: SpotifyUser | null) {
+  return (profile?.display_name?.trim()[0] ?? profile?.id?.trim()[0] ?? "?").toUpperCase();
+}
+
 export function App() {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(() => getStoredTokens());
   const [profile, setProfile] = useState<SpotifyUser | null>(null);
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
+  const [queueState, setQueueState] = useState<QueueState | null>(null);
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [webDevice, setWebDevice] = useState<WebPlaybackDevice | null>(null);
   const [status, setStatus] = useState("Ready");
@@ -112,9 +121,10 @@ export function App() {
   const [playlistScrolled, setPlaylistScrolled] = useState(false);
   const [localVolume, setLocalVolume] = useState(75);
   const [busy, setBusy] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
   const playlistLoadVersion = useRef(0);
-  const rateLimitUntil = useRef(0);
+  const libraryRateLimitUntil = useRef(0);
 
   const track = playback?.item ?? null;
   const cover = bestImage(track);
@@ -130,6 +140,8 @@ export function App() {
   const volume = playback?.device?.volume_percent ?? localVolume;
   const duration = track?.duration_ms ?? 0;
   const progressPercent = duration ? (localProgress / duration) * 100 : 0;
+  const profileImage = profile?.images?.[0]?.url;
+  const nextQueueTracks = queueState?.queue.filter((item) => item?.uri).slice(0, 5) ?? [];
   const visiblePlaylistTracks = useMemo(() => {
     const normalizedQuery = playlistTrackQuery.trim().toLowerCase();
     if (!normalizedQuery) return playlistTracks;
@@ -150,15 +162,18 @@ export function App() {
     });
   }, [playlistTrackQuery, playlistTracks]);
 
-  function isRateLimited() {
-    return Date.now() < rateLimitUntil.current;
+  function isLibraryRateLimited() {
+    return Date.now() < libraryRateLimitUntil.current;
   }
 
-  function handleRateLimit(error: unknown, fallback = "Spotify is rate limiting. Using cached data.") {
+  function handleLibraryRateLimit(
+    error: unknown,
+    fallback = "Spotify is rate limiting playlists. Using cached library.",
+  ) {
     if (!isSpotifyRateLimitError(error)) return false;
 
-    rateLimitUntil.current = Math.max(
-      rateLimitUntil.current,
+    libraryRateLimitUntil.current = Math.max(
+      libraryRateLimitUntil.current,
       Date.now() + error.retryAfterMs,
     );
     setStatus(fallback);
@@ -166,23 +181,25 @@ export function App() {
   }
 
   async function refreshState(nextTokens = tokens) {
-    if (!nextTokens || isRateLimited()) return;
-    const [nextPlayback, nextDevices] = await Promise.all([
+    if (!nextTokens) return;
+    const [nextPlayback, nextDevices, nextQueue] = await Promise.all([
       getPlayback(nextTokens),
       getDevices(nextTokens),
+      getQueue(nextTokens).catch(() => null),
     ]);
     setPlayback(nextPlayback ?? null);
     setDevices(nextDevices.devices);
+    setQueueState(nextQueue);
     setLocalProgress(nextPlayback?.progress_ms ?? 0);
-    rememberTrackImages([nextPlayback?.item]);
+    rememberTrackImages([nextPlayback?.item, ...(nextQueue?.queue ?? [])]);
     if (nextPlayback?.device?.volume_percent !== null && nextPlayback?.device?.volume_percent !== undefined) {
       setLocalVolume(nextPlayback.device.volume_percent);
     }
     setStatus(nextPlayback?.device ? "Connected" : "Choose a Spotify device");
   }
 
-  async function loadPlaylists(nextTokens = tokens) {
-    if (!nextTokens || isRateLimited()) return;
+  async function loadPlaylists(nextTokens = tokens, force = false) {
+    if (!nextTokens || (!force && isLibraryRateLimited())) return;
     const loadVersion = playlistLoadVersion.current + 1;
     playlistLoadVersion.current = loadVersion;
     const hasCachedPlaylists = playlists.length > 0;
@@ -223,7 +240,7 @@ export function App() {
       setPlaylists(nextPlaylists);
       saveCachedPlaylists(nextPlaylists);
     } catch (error) {
-      if (handleRateLimit(error)) return;
+      if (handleLibraryRateLimit(error)) return;
       setStatus(
         playlists.length > 0
           ? "Spotify is rate limiting. Using cached library."
@@ -332,7 +349,7 @@ export function App() {
         await refreshState(nextTokens);
       })
       .catch((error) => {
-        if (!handleRateLimit(error, "Spotify is rate limiting. Login finished, waiting.")) {
+        if (!handleLibraryRateLimit(error, "Spotify is rate limiting playlists. Login finished, waiting.")) {
           setStatus("Login failed");
         }
       });
@@ -347,7 +364,7 @@ export function App() {
         if (active) setProfile(nextProfile);
       })
       .catch((error) => {
-        if (active && !handleRateLimit(error)) setStatus("Profile unavailable");
+        if (active && !handleLibraryRateLimit(error)) setStatus("Profile unavailable");
       });
     void loadPlaylists(tokens);
 
@@ -356,7 +373,6 @@ export function App() {
         await refreshState(tokens);
       } catch (error) {
         if (!active) return;
-        if (handleRateLimit(error)) return;
         setStatus(error instanceof Error ? error.message : "Waiting for Spotify");
       }
     };
@@ -429,7 +445,7 @@ export function App() {
       setSearching(false);
       return;
     }
-    if (isRateLimited()) {
+    if (isLibraryRateLimited()) {
       setSearching(false);
       return;
     }
@@ -445,7 +461,9 @@ export function App() {
           }
         })
         .catch((error) => {
-          if (active && !handleRateLimit(error)) setStatus("Search unavailable");
+          if (active && !handleLibraryRateLimit(error, "Spotify is rate limiting search.")) {
+            setStatus("Search unavailable");
+          }
         })
         .finally(() => {
           if (active) setSearching(false);
@@ -464,6 +482,22 @@ export function App() {
       return;
     }
     window.location.href = await buildLoginUrl();
+  }
+
+  function signOut() {
+    clearTokens();
+    setTokens(null);
+    setProfile(null);
+    setPlayback(null);
+    setQueueState(null);
+    setDevices([]);
+    setWebDevice(null);
+    setPlaylists([]);
+    clearUiCache();
+    setSelectedPlaylist(null);
+    setPlaylistTracks([]);
+    setPlaylistTrackQuery("");
+    setProfileMenuOpen(false);
   }
 
   async function run(action: () => Promise<void>, message = "Updating playback") {
@@ -504,6 +538,19 @@ export function App() {
         await playTrack(tokens, trackToPlay.uri, targetDeviceId);
       },
       `Playing ${trackToPlay.name}`,
+    );
+    setView("now");
+  }
+
+  function playQueueItem(index: number) {
+    if (!tokens || !playback) return;
+    void run(
+      async () => {
+        for (let step = 0; step <= index; step += 1) {
+          await skipNext(tokens);
+        }
+      },
+      "Moving through queue",
     );
     setView("now");
   }
@@ -651,26 +698,55 @@ export function App() {
           Devices
         </button>
         <div className="rail-footer">
-          <p>{profile?.display_name ?? "Not connected"}</p>
+          {signedIn && (
+            <section className="queue-preview">
+              <div className="queue-preview-title">
+                <span>Up next</span>
+                {nextQueueTracks.length > 0 && <small>{nextQueueTracks.length}</small>}
+              </div>
+              {nextQueueTracks.length > 0 ? (
+                nextQueueTracks.map((queueTrack, index) => (
+                  <button
+                    className="queue-preview-row"
+                    key={`${queueTrack.uri}-${index}`}
+                    onClick={() => playQueueItem(index)}
+                    disabled={busy}
+                  >
+                    {bestImage(queueTrack) ? <img src={bestImage(queueTrack)} alt="" /> : <i />}
+                    <span>
+                      <strong>{queueTrack.name}</strong>
+                      <small>{queueTrack.artists.map((artist) => artist.name).join(", ")}</small>
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="queue-empty">No queue yet</p>
+              )}
+            </section>
+          )}
           {signedIn ? (
-            <button
-              className="ghost"
-              onClick={() => {
-                clearTokens();
-                setTokens(null);
-                setProfile(null);
-                setPlayback(null);
-                setDevices([]);
-                setWebDevice(null);
-                setPlaylists([]);
-                clearUiCache();
-                setSelectedPlaylist(null);
-                setPlaylistTracks([]);
-                setPlaylistTrackQuery("");
-              }}
-            >
-              Sign out
-            </button>
+            <div className="profile-menu-wrap">
+              {profileMenuOpen && (
+                <div className="profile-menu">
+                  <button onClick={() => setStatus("Settings are not ready yet")}>
+                    <Settings size={16} />
+                    Settings
+                  </button>
+                  <button onClick={signOut}>
+                    <LogOut size={16} />
+                    Sign out
+                  </button>
+                </div>
+              )}
+              <button className="profile-pill" onClick={() => setProfileMenuOpen((open) => !open)}>
+                {profileImage ? (
+                  <img src={profileImage} alt="" />
+                ) : (
+                  <span>{profileInitial(profile)}</span>
+                )}
+                <strong>{profile?.display_name ?? profile?.id ?? "Profile"}</strong>
+              </button>
+            </div>
           ) : (
             <button className="primary" onClick={login}>
               <LogIn size={18} />
@@ -716,7 +792,7 @@ export function App() {
                   </div>
                   <button
                     className="ghost compact"
-                    onClick={() => void loadPlaylists(tokens)}
+                    onClick={() => void loadPlaylists(tokens, true)}
                     disabled={!signedIn || loadingPlaylists}
                   >
                     Refresh

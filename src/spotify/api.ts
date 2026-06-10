@@ -159,6 +159,11 @@ export type PlaybackState = {
   device: SpotifyDevice | null;
 };
 
+export type QueueState = {
+  currently_playing: SpotifyTrack | null;
+  queue: SpotifyTrack[];
+};
+
 export type SearchTracksResponse = {
   tracks: {
     items: SpotifyTrack[];
@@ -205,6 +210,10 @@ export async function getPlayback(tokens: SpotifyTokens) {
 
 export async function getDevices(tokens: SpotifyTokens) {
   return spotifyFetch<{ devices: SpotifyDevice[] }>("/me/player/devices", tokens);
+}
+
+export async function getQueue(tokens: SpotifyTokens) {
+  return spotifyFetch<QueueState>("/me/player/queue", tokens);
 }
 
 export async function getMyPlaylists(tokens: SpotifyTokens, limit = 50, offset = 0) {
