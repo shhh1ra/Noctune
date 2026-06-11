@@ -7,6 +7,8 @@ import {
   LogIn,
   Mic2,
   MonitorSpeaker,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pause,
   Play,
   Rows3,
@@ -86,6 +88,16 @@ type TrackMenuState = {
   y: number;
 } | null;
 
+const RAIL_COLLAPSED_KEY = "custom-spotify-rail-collapsed";
+
+function loadRailCollapsed() {
+  return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === "true";
+}
+
+function saveRailCollapsed(collapsed: boolean) {
+  window.localStorage.setItem(RAIL_COLLAPSED_KEY, String(collapsed));
+}
+
 function formatTime(ms = 0) {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -151,12 +163,15 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authExpiredOpen, setAuthExpiredOpen] = useState(false);
   const [trackMenu, setTrackMenu] = useState<TrackMenuState>(null);
+  const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
+  const [queueVisible, setQueueVisible] = useState(true);
   const [manualQueueUris, setManualQueueUris] = useState<string[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
   const [localProgress, setLocalProgress] = useState(0);
   const playlistLoadVersion = useRef(0);
   const libraryRateLimitUntil = useRef(0);
   const previousGlowTrackUri = useRef<string | null>(null);
+  const profileExpandedRail = useRef(false);
   const [glowEntering, setGlowEntering] = useState(false);
 
   const track = playback?.item ?? null;
@@ -251,6 +266,33 @@ export function App() {
     if (message) setStatus(message);
   }
 
+  function setRailCollapsedPersisted(collapsed: boolean) {
+    profileExpandedRail.current = false;
+    setRailCollapsed(collapsed);
+    saveRailCollapsed(collapsed);
+  }
+
+  function closeProfileMenu() {
+    setProfileMenuOpen(false);
+    if (profileExpandedRail.current) {
+      profileExpandedRail.current = false;
+      setRailCollapsed(true);
+    }
+  }
+
+  function toggleProfileMenu() {
+    if (profileMenuOpen) {
+      closeProfileMenu();
+      return;
+    }
+
+    if (railCollapsed) {
+      profileExpandedRail.current = true;
+      setRailCollapsed(false);
+    }
+    setProfileMenuOpen(true);
+  }
+
   function resetSession(clearCache = false) {
     clearTokens();
     setTokens(null);
@@ -262,7 +304,7 @@ export function App() {
     setSelectedPlaylist(null);
     setPlaylistTracks([]);
     setPlaylistTrackQuery("");
-    setProfileMenuOpen(false);
+    closeProfileMenu();
     if (clearCache) {
       setPlaylists([]);
       clearUiCache();
@@ -921,10 +963,49 @@ export function App() {
   }
 
   const signedIn = Boolean(tokens);
+  const floatingQueueActive = signedIn && view === "now" && railCollapsed && queueVisible;
+  const renderQueuePreview = (className: string) => (
+    <section className={className}>
+      <div className="queue-preview-title">
+        <span>Up next</span>
+        {nextQueueTracks.length > 0 && <small>{nextQueueTracks.length}</small>}
+      </div>
+      {nextQueueTracks.length > 0 ? (
+        nextQueueTracks.map((queueTrack, index) => (
+          <button
+            className="queue-preview-row"
+            key={`${queueTrack.uri}-${index}`}
+            onClick={() => playQueueItem(queueTrack, index)}
+            disabled={busy}
+          >
+            {bestImage(queueTrack) ? <img src={bestImage(queueTrack)} alt="" /> : <i />}
+            <span>
+              <strong>{queueTrack.name}</strong>
+              <small>
+                {manualQueueUris.includes(queueTrack.uri) && (
+                  <ListPlus className="queue-source-icon" size={13} />
+                )}
+                {queueTrack.artists.map((artist) => artist.name).join(", ")}
+              </small>
+            </span>
+          </button>
+        ))
+      ) : (
+        <p className="queue-empty">No queue yet</p>
+      )}
+    </section>
+  );
+  const shellClass = [
+    "shell",
+    glowEntering ? "glow-enter" : "",
+    railCollapsed ? "rail-collapsed" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <main
-      className={glowEntering ? "shell glow-enter" : "shell"}
+      className={shellClass}
       style={
         {
           "--accent": activeAccent.primary,
@@ -935,18 +1016,21 @@ export function App() {
         } as React.CSSProperties
       }
     >
-      <aside className="rail">
-        <div className="brand">
-          <span className="brand-mark" />
-          <span>Custom Spotify</span>
-        </div>
+      <aside className={railCollapsed ? "rail collapsed" : "rail"}>
+        <button
+          className="rail-toggle"
+          title={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => setRailCollapsedPersisted(!railCollapsed)}
+        >
+          {railCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+        </button>
         <button
           className={view === "now" ? "nav active" : "nav"}
           title="Now playing"
           onClick={() => setView("now")}
         >
           <ListMusic size={20} />
-          Now
+          <span>Now</span>
         </button>
         <button
           className={view === "playlists" ? "nav active" : "nav"}
@@ -958,7 +1042,7 @@ export function App() {
           }}
         >
           <Rows3 size={20} />
-          Playlists
+          <span>Playlists</span>
         </button>
         <button
           className={view === "search" ? "nav active" : "nav"}
@@ -966,7 +1050,7 @@ export function App() {
           onClick={() => setView("search")}
         >
           <Search size={20} />
-          Search
+          <span>Search</span>
         </button>
         <button
           className={view === "devices" ? "nav active" : "nav"}
@@ -974,40 +1058,16 @@ export function App() {
           onClick={() => setView("devices")}
         >
           <MonitorSpeaker size={20} />
-          Devices
+          <span>Devices</span>
         </button>
         <div className="rail-footer">
-          {signedIn && (
-            <section className="queue-preview">
-              <div className="queue-preview-title">
-                <span>Up next</span>
-                {nextQueueTracks.length > 0 && <small>{nextQueueTracks.length}</small>}
-              </div>
-              {nextQueueTracks.length > 0 ? (
-                nextQueueTracks.map((queueTrack, index) => (
-                  <button
-                    className="queue-preview-row"
-                    key={`${queueTrack.uri}-${index}`}
-                    onClick={() => playQueueItem(queueTrack, index)}
-                    disabled={busy}
-                  >
-                    {bestImage(queueTrack) ? <img src={bestImage(queueTrack)} alt="" /> : <i />}
-                    <span>
-                      <strong>{queueTrack.name}</strong>
-                      <small>
-                        {manualQueueUris.includes(queueTrack.uri) && (
-                          <ListPlus className="queue-source-icon" size={13} />
-                        )}
-                        {queueTrack.artists.map((artist) => artist.name).join(", ")}
-                      </small>
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="queue-empty">No queue yet</p>
-              )}
-            </section>
-          )}
+          {signedIn &&
+            !railCollapsed &&
+            renderQueuePreview(
+              queueVisible
+                ? "queue-preview rail-queue-preview visible"
+                : "queue-preview rail-queue-preview",
+            )}
           {signedIn ? (
             <div className="profile-menu-wrap">
               {profileMenuOpen && (
@@ -1015,19 +1075,24 @@ export function App() {
                   <button
                     onClick={() => {
                       setSettingsOpen(true);
-                      setProfileMenuOpen(false);
+                      closeProfileMenu();
                     }}
                   >
                     <Settings size={16} />
                     Settings
                   </button>
-                  <button onClick={signOut}>
+                  <button
+                    onClick={() => {
+                      closeProfileMenu();
+                      signOut();
+                    }}
+                  >
                     <LogOut size={16} />
                     Sign out
                   </button>
                 </div>
               )}
-              <button className="profile-pill" onClick={() => setProfileMenuOpen((open) => !open)}>
+              <button className="profile-pill" onClick={toggleProfileMenu}>
                 {profileImage ? (
                   <img src={profileImage} alt="" />
                 ) : (
@@ -1047,12 +1112,18 @@ export function App() {
 
       <section className="stage">
         <header className="topbar">
-          <span>{status}</span>
+          <div className="topbar-left">
+            <div className="app-brand">
+              <span className="brand-mark" />
+              <strong>Custom Spotify</strong>
+            </div>
+            <span>{status}</span>
+          </div>
           <span>{playback?.device?.name ?? window.desktop?.platform ?? "desktop"}</span>
         </header>
 
         {view === "now" && (
-          <section className="now-playing">
+          <section className={floatingQueueActive ? "now-playing" : "now-playing queue-hidden"}>
             <div className="cover-wrap">
               {cover ? <img src={cover} alt="" /> : <div className="cover-placeholder" />}
             </div>
@@ -1312,6 +1383,15 @@ export function App() {
           </section>
         )}
 
+        {signedIn &&
+          view === "now" &&
+          railCollapsed &&
+          renderQueuePreview(
+            queueVisible
+              ? "queue-preview stage-queue-preview visible"
+              : "queue-preview stage-queue-preview",
+          )}
+
         <footer className="player">
           <div className="mini-track">
             {cover ? <img src={cover} alt="" /> : <span />}
@@ -1378,6 +1458,14 @@ export function App() {
           </div>
 
           <div className="volume compact-volume">
+            <button
+              className={queueVisible ? "queue-toggle active-icon" : "queue-toggle"}
+              onClick={() => setQueueVisible((visible) => !visible)}
+              title={queueVisible ? "Hide queue" : "Show queue"}
+              disabled={!signedIn}
+            >
+              <ListMusic size={18} />
+            </button>
             <button
               className={view === "lyrics" ? "lyrics-toggle active-icon" : "lyrics-toggle"}
               onClick={() => setView(view === "lyrics" ? "now" : "lyrics")}
