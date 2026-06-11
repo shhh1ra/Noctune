@@ -4,12 +4,24 @@ export type AppSettings = {
   rateLimitGuardEnabled: boolean;
   customAccentEnabled: boolean;
   customAccentColor: string;
+  bordersEnabled: boolean;
+  borderDockEnabled: boolean;
+  borderAppEnabled: boolean;
+  borderProfileEnabled: boolean;
+  borderActiveNavEnabled: boolean;
+  borderQueueEnabled: boolean;
 };
 
 export const defaultSettings: AppSettings = {
   rateLimitGuardEnabled: true,
   customAccentEnabled: false,
   customAccentColor: "#1ed760",
+  bordersEnabled: true,
+  borderDockEnabled: true,
+  borderAppEnabled: true,
+  borderProfileEnabled: true,
+  borderActiveNavEnabled: true,
+  borderQueueEnabled: true,
 };
 
 export function loadSettings(): AppSettings {

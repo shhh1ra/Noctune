@@ -999,6 +999,11 @@ export function App() {
     "shell",
     glowEntering ? "glow-enter" : "",
     railCollapsed ? "rail-collapsed" : "",
+    appSettings.bordersEnabled && appSettings.borderAppEnabled ? "border-app" : "",
+    appSettings.bordersEnabled && appSettings.borderDockEnabled ? "border-dock" : "",
+    appSettings.bordersEnabled && appSettings.borderProfileEnabled ? "border-profile" : "",
+    appSettings.bordersEnabled && appSettings.borderActiveNavEnabled ? "border-active-nav" : "",
+    appSettings.bordersEnabled && appSettings.borderQueueEnabled ? "border-queue" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1548,48 +1553,162 @@ export function App() {
               <i />
             </label>
 
-            {appSettings.customAccentEnabled && (
-              <div className="accent-settings">
-                <span
-                  className="accent-preview"
-                  style={{ background: customAccent ?? "#1ed760" }}
-                />
+            <div className={appSettings.customAccentEnabled ? "accent-settings visible" : "accent-settings"}>
+              <span
+                className="accent-preview"
+                style={{ background: customAccent ?? "#1ed760" }}
+              />
+              <input
+                className="accent-picker"
+                type="color"
+                value={customAccent ?? "#1ed760"}
+                onChange={(event) =>
+                  updateSettings({
+                    ...appSettings,
+                    customAccentColor: event.target.value,
+                  })
+                }
+                tabIndex={appSettings.customAccentEnabled ? 0 : -1}
+              />
+              <label>
+                <span>HEX</span>
                 <input
-                  className="accent-picker"
-                  type="color"
-                  value={customAccent ?? "#1ed760"}
+                  value={appSettings.customAccentColor}
                   onChange={(event) =>
                     updateSettings({
                       ...appSettings,
                       customAccentColor: event.target.value,
                     })
                   }
-                />
-                <label>
-                  <span>HEX</span>
-                  <input
-                    value={appSettings.customAccentColor}
-                    onChange={(event) =>
-                      updateSettings({
+                  onBlur={() => {
+                    const nextColor = normalizeHexColor(appSettings.customAccentColor) ?? "#1ed760";
+                    updateSettings(
+                      {
                         ...appSettings,
-                        customAccentColor: event.target.value,
-                      })
-                    }
-                    onBlur={() => {
-                      const nextColor = normalizeHexColor(appSettings.customAccentColor) ?? "#1ed760";
-                      updateSettings(
-                        {
-                          ...appSettings,
-                          customAccentColor: nextColor,
-                        },
-                        "Accent color updated",
-                      );
-                    }}
-                    placeholder="#1ed760"
-                  />
-                </label>
-              </div>
-            )}
+                        customAccentColor: nextColor,
+                      },
+                      "Accent color updated",
+                    );
+                  }}
+                  placeholder="#1ed760"
+                  tabIndex={appSettings.customAccentEnabled ? 0 : -1}
+                />
+              </label>
+            </div>
+
+            <label className="settings-row">
+              <span>
+                <strong>Borders</strong>
+                <small>Enable accent borders on selected parts of the interface.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={appSettings.bordersEnabled}
+                onChange={(event) =>
+                  updateSettings(
+                    {
+                      ...appSettings,
+                      bordersEnabled: event.target.checked,
+                    },
+                    event.target.checked ? "Borders enabled" : "Borders disabled",
+                  )
+                }
+              />
+              <i />
+            </label>
+
+            <div className={appSettings.bordersEnabled ? "border-settings visible" : "border-settings"}>
+              <label className="settings-row border-option">
+                <span>
+                  <strong>App border</strong>
+                  <small>Outline the whole application window.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={appSettings.borderAppEnabled}
+                  onChange={(event) =>
+                    updateSettings({
+                      ...appSettings,
+                      borderAppEnabled: event.target.checked,
+                    })
+                  }
+                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
+                />
+                <i />
+              </label>
+              <label className="settings-row border-option">
+                <span>
+                  <strong>Dock border</strong>
+                  <small>Outline the bottom player dock.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={appSettings.borderDockEnabled}
+                  onChange={(event) =>
+                    updateSettings({
+                      ...appSettings,
+                      borderDockEnabled: event.target.checked,
+                    })
+                  }
+                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
+                />
+                <i />
+              </label>
+              <label className="settings-row border-option">
+                <span>
+                  <strong>Profile border</strong>
+                  <small>Outline the profile button in the sidebar.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={appSettings.borderProfileEnabled}
+                  onChange={(event) =>
+                    updateSettings({
+                      ...appSettings,
+                      borderProfileEnabled: event.target.checked,
+                    })
+                  }
+                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
+                />
+                <i />
+              </label>
+              <label className="settings-row border-option">
+                <span>
+                  <strong>Active sidebar button</strong>
+                  <small>Outline the selected sidebar navigation button.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={appSettings.borderActiveNavEnabled}
+                  onChange={(event) =>
+                    updateSettings({
+                      ...appSettings,
+                      borderActiveNavEnabled: event.target.checked,
+                    })
+                  }
+                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
+                />
+                <i />
+              </label>
+              <label className="settings-row border-option">
+                <span>
+                  <strong>Queue border</strong>
+                  <small>Outline the queue panel in the sidebar and floating mode.</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={appSettings.borderQueueEnabled}
+                  onChange={(event) =>
+                    updateSettings({
+                      ...appSettings,
+                      borderQueueEnabled: event.target.checked,
+                    })
+                  }
+                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
+                />
+                <i />
+              </label>
+            </div>
           </section>
         </div>
       )}
