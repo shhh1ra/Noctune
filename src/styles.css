@@ -76,7 +76,7 @@ input:disabled {
   overflow: hidden;
   display: grid;
   grid-template-columns: 256px 1fr;
-  min-height: 100vh;
+  height: 100vh;
   border: 2px solid transparent;
   border-radius: 8px;
   background: linear-gradient(135deg, #101214 0%, #090b0d 46%, #121518 100%);
@@ -908,8 +908,8 @@ input {
   display: grid;
   grid-template-rows: 72px minmax(0, 1fr) auto;
   min-width: 0;
-  min-height: 100vh;
-  height: 100vh;
+  min-height: 0;
+  height: 100%;
   padding: 0 36px 18px;
   overflow: hidden;
 }
