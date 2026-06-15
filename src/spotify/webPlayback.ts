@@ -25,7 +25,7 @@ export async function createWebPlaybackDevice(
 
   return new Promise<WebPlaybackDevice>((resolve, reject) => {
     const player = new Spotify.Player({
-      name: "Custom Spotify Client",
+      name: "Noctune",
       getOAuthToken: (callback) => {
         const storedTokens = getStoredTokens() ?? tokens;
         if (storedTokens.expiresAt - Date.now() < 60_000) {

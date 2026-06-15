@@ -1,6 +1,6 @@
-# Custom Spotify Client
+# Noctune
 
-Cross-platform desktop Spotify client with a custom React UI, dynamic or custom accent color, Spotify Web Playback SDK support where available, and Spotify Connect controller fallback.
+Noctune is a cross-platform desktop Spotify client with a custom React UI, dynamic or custom accent color, Spotify Web Playback SDK support where available, and Spotify Connect controller fallback. The desktop shell is built with Tauri to avoid bundling a full Chromium runtime.
 
 ## What it does
 
@@ -26,7 +26,7 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic or custom 
 
 ## Stack
 
-- Electron for cross-platform desktop packaging.
+- Tauri for a lighter cross-platform desktop shell.
 - React + TypeScript + Vite for the UI.
 - Spotify Web Playback SDK for Premium-capable in-app playback.
 - Spotify Web API for playback state, device discovery, and Connect controls.
@@ -34,21 +34,25 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic or custom 
 ## Setup
 
 1. Install Node.js LTS from <https://nodejs.org/>.
-2. Create a Spotify app at <https://developer.spotify.com/dashboard>.
-3. Add this redirect URI in Spotify dashboard:
+2. Install Rust from <https://rustup.rs/>. Tauri needs `rustc` and `cargo` for desktop builds.
+3. Create a Spotify app at <https://developer.spotify.com/dashboard>.
+4. Add these redirect URIs in Spotify dashboard:
 
    ```text
    http://127.0.0.1:5173/callback
+   http://127.0.0.1:43872/callback
    ```
 
-4. Copy `.env.example` to `.env` and add your Spotify client id.
-5. Install dependencies:
+   Use `http://127.0.0.1:5173/callback` while running `npm run dev`. Use `http://127.0.0.1:43872/callback` for packaged Tauri builds. Spotify rejects `http://tauri.localhost/callback` in the dashboard, so Noctune runs a tiny local callback server on port `43872` and forwards the login back into the app.
+
+5. Copy `.env.example` to `.env` and add your Spotify client id. For packaged builds, copy `.env.production.example` to `.env.production` and add the same client id there.
+6. Install dependencies:
 
    ```bash
    npm install
    ```
 
-6. Start the desktop app:
+7. Start the desktop app:
 
    ```bash
    npm run dev
@@ -70,7 +74,7 @@ Build a Windows installer:
 npm run dist:win
 ```
 
-The Windows output is written to `release/`.
+The Windows output is written to `src-tauri/target/release/bundle/nsis/`.
 
 ## Settings
 

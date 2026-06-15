@@ -138,6 +138,10 @@ function profileInitial(profile?: SpotifyUser | null) {
   return (profile?.display_name?.trim()[0] ?? profile?.id?.trim()[0] ?? "?").toUpperCase();
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function App() {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(() => getStoredTokens());
   const [profile, setProfile] = useState<SpotifyUser | null>(null);
@@ -198,8 +202,48 @@ export function App() {
     [track],
   );
 
+  useEffect(() => {
+    document.title = track ? `${track.name} - ${artists}` : "Noctune";
+
+    if (!("mediaSession" in navigator)) return;
+
+    if (!track) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: "Noctune",
+        artist: "No active track",
+      });
+      return;
+    }
+
+    const artwork = cover
+      ? [
+          { src: cover, sizes: "96x96", type: "image/jpeg" },
+          { src: cover, sizes: "128x128", type: "image/jpeg" },
+          { src: cover, sizes: "256x256", type: "image/jpeg" },
+          { src: cover, sizes: "512x512", type: "image/jpeg" },
+        ]
+      : undefined;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.name,
+      artist: artists,
+      album: track.album.name,
+      artwork,
+    });
+  }, [artists, cover, track]);
+
   const activeDeviceId = playback?.device?.id ?? devices.find((device) => device.is_active)?.id;
   const targetDeviceId = webDevice?.deviceId ?? activeDeviceId;
+  const webPlaybackDeviceActive = Boolean(
+    webDevice &&
+      (activeDeviceId === webDevice.deviceId ||
+        playback?.device?.id === "web-playback" ||
+        devices.some((device) => device.id === webDevice.deviceId && device.is_active)),
+  );
+  const visibleDevices = useMemo(
+    () => devices.filter((device) => device.id !== webDevice?.deviceId),
+    [devices, webDevice?.deviceId],
+  );
   const volume = playback?.device?.volume_percent ?? localVolume;
   const duration = track?.duration_ms ?? 0;
   const progressPercent = duration ? (localProgress / duration) * 100 : 0;
@@ -408,6 +452,54 @@ export function App() {
     }
 
     return syncTimers;
+  }
+
+  function applyOptimisticTrackSelection(
+    nextTrack: SpotifyTrack,
+    nextQueue: SpotifyTrack[] = [],
+    queueLockMs = 2500,
+  ) {
+    optimisticTransitionFromUri.current = track?.uri ?? null;
+    pocketQueueLockedUntil.current = Date.now() + queueLockMs;
+    prepareTrackVisuals(nextTrack);
+    prepareTrackVisuals(nextQueue[0]);
+
+    setPlayback((current) =>
+      current
+        ? {
+            ...current,
+            item: nextTrack,
+            progress_ms: 0,
+            is_playing: true,
+          }
+        : {
+            is_playing: true,
+            progress_ms: 0,
+            repeat_state: playback?.repeat_state,
+            shuffle_state: playback?.shuffle_state,
+            item: nextTrack,
+            device: playback?.device ?? null,
+          },
+    );
+    setLocalProgress(0);
+    setPocketQueueTracks(nextQueue);
+  }
+
+  async function restoreShuffleLater(shouldRestore: boolean) {
+    if (!tokens || !shouldRestore) return;
+    await delay(1200);
+    await setShuffle(tokens, true);
+  }
+
+  async function ensurePlaybackDevice() {
+    if (!tokens) return targetDeviceId;
+    const deviceId = webDevice?.deviceId ?? targetDeviceId;
+    if (webDevice?.deviceId && activeDeviceId !== webDevice.deviceId) {
+      await transferPlayback(tokens, webDevice.deviceId, false);
+      await delay(250);
+      return webDevice.deviceId;
+    }
+    return deviceId;
   }
 
   function resetSession(clearCache = false) {
@@ -892,15 +984,16 @@ export function App() {
 
   function play(trackToPlay: SpotifyTrack) {
     if (!tokens) return;
+    applyOptimisticTrackSelection(trackToPlay);
     void run(
       async () => {
-        if (webDevice?.deviceId && activeDeviceId !== webDevice.deviceId) {
-          await transferPlayback(tokens, webDevice.deviceId, false);
-        }
-        await playTrack(tokens, trackToPlay.uri, targetDeviceId);
+        const deviceId = await ensurePlaybackDevice();
+        await playTrack(tokens, trackToPlay.uri, deviceId);
       },
       `Playing ${trackToPlay.name}`,
+      false,
     );
+    window.setTimeout(() => void refreshState(tokens, true), 2500);
     setView("now");
   }
 
@@ -1025,21 +1118,19 @@ export function App() {
 
   function playPlaylistTrack(trackToPlay: SpotifyTrack, index: number) {
     if (!tokens || !selectedPlaylist) return;
+    const nextTracks = playlistTracks
+      .slice(index + 1, index + 6)
+      .map((item) => playlistTrack(item))
+      .filter((item): item is SpotifyTrack => Boolean(item?.uri));
+
+    applyOptimisticTrackSelection(trackToPlay, nextTracks, 3500);
     void run(
       async () => {
-        if (webDevice?.deviceId && activeDeviceId !== webDevice.deviceId) {
-          await transferPlayback(tokens, webDevice.deviceId, false);
-        }
+        const deviceId = await ensurePlaybackDevice();
 
         const restoreShuffle = Boolean(playback?.shuffle_state);
         if (restoreShuffle) {
           await setShuffle(tokens, false);
-        }
-
-        if (selectedPlaylist.kind === "playlist" && selectedPlaylist.uri) {
-          await playContext(tokens, selectedPlaylist.uri, targetDeviceId, trackToPlay.uri);
-          if (restoreShuffle) await setShuffle(tokens, true);
-          return;
         }
 
         const nextUris = playlistTracks
@@ -1048,16 +1139,19 @@ export function App() {
           .filter((uri): uri is string => Boolean(uri));
 
         if (nextUris.length > 1) {
-          await playTracks(tokens, nextUris, targetDeviceId);
-          if (restoreShuffle) await setShuffle(tokens, true);
+          await playTracks(tokens, nextUris.slice(0, 100), deviceId);
+          await restoreShuffleLater(restoreShuffle);
           return;
         }
 
-        await playTrack(tokens, trackToPlay.uri, targetDeviceId);
-        if (restoreShuffle) await setShuffle(tokens, true);
+        await playTrack(tokens, trackToPlay.uri, deviceId);
+        await restoreShuffleLater(restoreShuffle);
       },
       `Playing ${trackToPlay.name}`,
+      false,
     );
+    window.setTimeout(() => void refreshState(tokens, false), 2500);
+    window.setTimeout(() => void refreshState(tokens, true), 3500);
     setView("now");
   }
 
@@ -1270,7 +1364,7 @@ export function App() {
           <div className="topbar-left">
             <div className="app-brand">
               <span className="brand-mark" />
-              <strong>Custom Spotify</strong>
+              <strong>Noctune</strong>
             </div>
             <span>{status}</span>
           </div>
@@ -1482,18 +1576,18 @@ export function App() {
           <section className="devices-view">
             {webDevice && (
               <button
-                className="device-row"
+                className={webPlaybackDeviceActive ? "device-row active" : "device-row"}
                 onClick={() => transfer(webDevice.deviceId, false)}
                 disabled={busy}
               >
                 <Laptop size={22} />
                 <span>
-                  <strong>This app</strong>
+                  <strong>Noctune</strong>
                   <small>Web Playback SDK device</small>
                 </span>
               </button>
             )}
-            {devices.map((device) => (
+            {visibleDevices.map((device) => (
               <button
                 key={device.id}
                 className={device.is_active ? "device-row active" : "device-row"}
@@ -1510,7 +1604,7 @@ export function App() {
                 </span>
               </button>
             ))}
-            {signedIn && devices.length === 0 && !webDevice && (
+            {signedIn && visibleDevices.length === 0 && !webDevice && (
               <p className="empty">Open Spotify on another device or wait for in-app playback.</p>
             )}
           </section>
@@ -1651,7 +1745,7 @@ export function App() {
           <section className="settings-dialog" onClick={(event) => event.stopPropagation()}>
             <header className="settings-header">
               <div>
-                <span>Custom Spotify</span>
+                <span>Noctune</span>
                 <h2>Settings</h2>
               </div>
               <button className="settings-close" onClick={() => setSettingsOpen(false)} title="Close">

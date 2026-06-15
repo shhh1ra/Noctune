@@ -1,0 +1,16 @@
+[package]
+name = "noctune"
+version = "0.1.0"
+description = "Lightweight custom Spotify desktop client"
+authors = ["shhh1ra"]
+edition = "2021"
+
+[lib]
+name = "noctune_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
