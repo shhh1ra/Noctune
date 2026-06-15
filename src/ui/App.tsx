@@ -5,7 +5,9 @@ import {
   LogOut,
   ListMusic,
   LogIn,
+  Maximize2,
   Mic2,
+  Minus,
   MonitorSpeaker,
   PanelLeftClose,
   PanelLeftOpen,
@@ -22,6 +24,7 @@ import {
   Volume2,
   X,
 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildLoginUrl,
@@ -66,7 +69,12 @@ import {
   transferPlayback,
 } from "../spotify/api";
 import { createWebPlaybackDevice, WebPlaybackDevice } from "../spotify/webPlayback";
-import { spotifyConfig } from "../spotify/config";
+import {
+  getSpotifyClientId,
+  getStoredSpotifyClientId,
+  saveSpotifyClientId,
+  spotifyConfig,
+} from "../spotify/config";
 import {
   cacheImageBlob,
   cachedTrackImage,
@@ -142,6 +150,25 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function getRuntimePlatform() {
+  const desktopPlatform = window.desktop?.platform?.toLowerCase() ?? "";
+  const navigatorPlatform = navigator.platform?.toLowerCase() ?? "";
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  if (
+    desktopPlatform.includes("darwin") ||
+    desktopPlatform.includes("mac") ||
+    navigatorPlatform.includes("mac") ||
+    userAgent.includes("mac os")
+  ) {
+    return "macos";
+  }
+
+  return desktopPlatform || navigatorPlatform || "desktop";
+}
+
+const appWindow = getCurrentWindow();
+
 export function App() {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(() => getStoredTokens());
   const [profile, setProfile] = useState<SpotifyUser | null>(null);
@@ -149,6 +176,7 @@ export function App() {
   const [queueState, setQueueState] = useState<QueueState | null>(null);
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [webDevice, setWebDevice] = useState<WebPlaybackDevice | null>(null);
+  const autoSelectedWebDeviceId = useRef<string | null>(null);
   const [status, setStatus] = useState("Ready");
   const [view, setView] = useState<View>("now");
   const [query, setQuery] = useState("");
@@ -174,6 +202,13 @@ export function App() {
   const [pocketQueueTracks, setPocketQueueTracks] = useState<SpotifyTrack[]>([]);
   const [manualQueueUris, setManualQueueUris] = useState<string[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
+  const runtimePlatform = useMemo(() => getRuntimePlatform(), []);
+  const isMacOs = runtimePlatform === "macos";
+  const [spotifyClientId, setSpotifyClientId] = useState(() => getStoredSpotifyClientId());
+  const [spotifyClientIdDraft, setSpotifyClientIdDraft] = useState(
+    () => getStoredSpotifyClientId() || getSpotifyClientId(),
+  );
+  const [clientIdPromptOpen, setClientIdPromptOpen] = useState(() => !getSpotifyClientId());
   const [localProgress, setLocalProgress] = useState(0);
   const [cachedImageUrls, setCachedImageUrls] = useState<Record<string, string>>({});
   const playlistLoadVersion = useRef(0);
@@ -342,6 +377,21 @@ export function App() {
     setAppSettings(nextSettings);
     saveSettings(nextSettings);
     if (message) setStatus(message);
+  }
+
+  function saveClientIdFromDraft(message = "Spotify client id saved") {
+    const normalized = spotifyClientIdDraft.trim();
+    if (!normalized) {
+      setStatus("Spotify client id is required");
+      return false;
+    }
+
+    saveSpotifyClientId(normalized);
+    setSpotifyClientId(normalized);
+    setSpotifyClientIdDraft(normalized);
+    setClientIdPromptOpen(false);
+    setStatus(message);
+    return true;
   }
 
   function setRailCollapsedPersisted(collapsed: boolean) {
@@ -880,6 +930,28 @@ export function App() {
   }, [tokens, volume, webDevice]);
 
   useEffect(() => {
+    if (!tokens || !webDevice?.deviceId || webPlaybackDeviceActive) return;
+    if (autoSelectedWebDeviceId.current === webDevice.deviceId) return;
+
+    let cancelled = false;
+    autoSelectedWebDeviceId.current = webDevice.deviceId;
+    setStatus("Selecting in-app playback");
+
+    transferPlayback(tokens, webDevice.deviceId, false)
+      .then(() => delay(350))
+      .then(() => {
+        if (!cancelled) void refreshState(tokens);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("Connect fallback ready");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tokens, webDevice?.deviceId, webPlaybackDeviceActive]);
+
+  useEffect(() => {
     if (!tokens || query.trim().length < 2) {
       setResults([]);
       setSearching(false);
@@ -934,8 +1006,9 @@ export function App() {
   }, [trackMenu]);
 
   async function login() {
-    if (!spotifyConfig.clientId) {
-      setStatus("Add Spotify client id to .env");
+    if (!getSpotifyClientId()) {
+      setClientIdPromptOpen(true);
+      setStatus("Add Spotify client id");
       return;
     }
     setAuthExpiredOpen(false);
@@ -1206,6 +1279,40 @@ export function App() {
     void run(() => setRepeat(tokens, next), "Changing repeat");
   }
 
+  function minimizeWindow() {
+    void appWindow.minimize();
+  }
+
+  function toggleMaximizeWindow() {
+    void appWindow.toggleMaximize();
+  }
+
+  function closeWindow() {
+    void appWindow.close();
+  }
+
+  const windowsWindowControls = (
+    <div className="window-controls windows-controls">
+      <button type="button" title="Minimize" onClick={minimizeWindow}>
+        <Minus size={16} />
+      </button>
+      <button type="button" title="Maximize" onClick={toggleMaximizeWindow}>
+        <Maximize2 size={14} />
+      </button>
+      <button type="button" title="Close" className="close" onClick={closeWindow}>
+        <X size={17} />
+      </button>
+    </div>
+  );
+
+  const macWindowControls = (
+    <div className="window-controls mac-controls" aria-label="Window controls">
+      <button type="button" title="Close" className="mac-close" onClick={closeWindow} />
+      <button type="button" title="Minimize" className="mac-minimize" onClick={minimizeWindow} />
+      <button type="button" title="Zoom" className="mac-zoom" onClick={toggleMaximizeWindow} />
+    </div>
+  );
+
   const signedIn = Boolean(tokens);
   const floatingQueueActive = signedIn && view === "now" && railCollapsed && queueVisible;
   const renderQueuePreview = (className: string) => (
@@ -1360,15 +1467,20 @@ export function App() {
       </aside>
 
       <section className="stage">
-        <header className="topbar">
-          <div className="topbar-left">
+        <header className={isMacOs ? "topbar macos" : "topbar"}>
+          {isMacOs && macWindowControls}
+          <div className="topbar-left" data-tauri-drag-region>
             <div className="app-brand">
               <span className="brand-mark" />
               <strong>Noctune</strong>
             </div>
             <span>{status}</span>
           </div>
-          <span>{playback?.device?.name ?? window.desktop?.platform ?? "desktop"}</span>
+          <div className="topbar-drag-spacer" data-tauri-drag-region />
+          <div className="topbar-right">
+            <span data-tauri-drag-region>{playback?.device?.name ?? runtimePlatform}</span>
+            {!isMacOs && windowsWindowControls}
+          </div>
         </header>
 
         {view === "now" && (
@@ -1755,6 +1867,23 @@ export function App() {
 
             <label className="settings-row">
               <span>
+                <strong>Spotify Client ID</strong>
+                <small>Stored locally on this device. Used for Spotify login.</small>
+              </span>
+              <button
+                className="settings-mini-button"
+                onClick={() => {
+                  setSpotifyClientIdDraft(spotifyClientId || getSpotifyClientId());
+                  setClientIdPromptOpen(true);
+                }}
+                type="button"
+              >
+                Edit
+              </button>
+            </label>
+
+            <label className="settings-row">
+              <span>
                 <strong>Rate limit guard</strong>
                 <small>Pause playlist and search requests when Spotify returns too many requests.</small>
               </span>
@@ -1972,6 +2101,49 @@ export function App() {
             <button className="hero-action session-action" onClick={login}>
               <LogIn size={18} />
               Connect Spotify
+            </button>
+          </section>
+        </div>
+      )}
+
+      {clientIdPromptOpen && (
+        <div className="settings-overlay session-overlay">
+          <section className="settings-dialog session-dialog client-id-dialog">
+            <header className="settings-header">
+              <div>
+                <span>Noctune setup</span>
+                <h2>Spotify Client ID</h2>
+              </div>
+              {getSpotifyClientId() && (
+                <button
+                  className="settings-close"
+                  onClick={() => setClientIdPromptOpen(false)}
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </header>
+            <p className="session-copy">
+              Paste your Spotify app Client ID. Noctune stores it locally and will use it for login.
+            </p>
+            <label className="client-id-field">
+              <span>Client ID</span>
+              <input
+                value={spotifyClientIdDraft}
+                onChange={(event) => setSpotifyClientIdDraft(event.target.value)}
+                placeholder="Spotify client id"
+                autoFocus
+              />
+            </label>
+            <button
+              className="hero-action session-action"
+              onClick={() => {
+                if (saveClientIdFromDraft()) void login();
+              }}
+            >
+              <LogIn size={18} />
+              Save and connect
             </button>
           </section>
         </div>

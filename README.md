@@ -45,14 +45,13 @@ Noctune is a cross-platform desktop Spotify client with a custom React UI, dynam
 
    Use `http://127.0.0.1:5173/callback` while running `npm run dev`. Use `http://127.0.0.1:43872/callback` for packaged Tauri builds. Spotify rejects `http://tauri.localhost/callback` in the dashboard, so Noctune runs a tiny local callback server on port `43872` and forwards the login back into the app.
 
-5. Copy `.env.example` to `.env` and add your Spotify client id. For packaged builds, copy `.env.production.example` to `.env.production` and add the same client id there.
-6. Install dependencies:
+5. Install dependencies:
 
    ```bash
    npm install
    ```
 
-7. Start the desktop app:
+6. Start the desktop app:
 
    ```bash
    npm run dev
@@ -75,6 +74,8 @@ npm run dist:win
 ```
 
 The Windows output is written to `src-tauri/target/release/bundle/nsis/`.
+
+On first launch, paste your Spotify app Client ID into Noctune. You can change it later from Settings. The app does not require `.env` files.
 
 ## Settings
 

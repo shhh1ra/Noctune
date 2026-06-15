@@ -4,10 +4,29 @@ const defaultRedirectUri =
   appOrigin === "http://tauri.localhost"
     ? "http://127.0.0.1:43872/callback"
     : `${appOrigin}/callback`;
+const CLIENT_ID_KEY = "noctune_spotify_client_id";
+
+export function getStoredSpotifyClientId() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(CLIENT_ID_KEY)?.trim() ?? "";
+}
+
+export function getSpotifyClientId() {
+  return getStoredSpotifyClientId();
+}
+
+export function saveSpotifyClientId(clientId: string) {
+  if (typeof window === "undefined") return;
+  const normalized = clientId.trim();
+  if (normalized) {
+    window.localStorage.setItem(CLIENT_ID_KEY, normalized);
+  } else {
+    window.localStorage.removeItem(CLIENT_ID_KEY);
+  }
+}
 
 export const spotifyConfig = {
-  clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID ?? "",
-  redirectUri: import.meta.env.VITE_SPOTIFY_REDIRECT_URI ?? defaultRedirectUri,
+  redirectUri: defaultRedirectUri,
   scopes: [
     "streaming",
     "user-read-email",

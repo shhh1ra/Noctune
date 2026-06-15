@@ -1,4 +1,4 @@
-import { spotifyConfig } from "./config";
+import { getSpotifyClientId, spotifyConfig } from "./config";
 import { createCodeChallenge, createCodeVerifier } from "./pkce";
 
 const TOKEN_KEY = "spotify_tokens";
@@ -46,13 +46,16 @@ export function clearTokens() {
 }
 
 export async function buildLoginUrl() {
+  const clientId = getSpotifyClientId();
+  if (!clientId) throw new Error("Missing Spotify client id.");
+
   const verifier = createCodeVerifier();
   const challenge = await createCodeChallenge(verifier);
   localStorage.setItem(VERIFIER_KEY, verifier);
 
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: spotifyConfig.clientId,
+    client_id: clientId,
     scope: spotifyConfig.scopes.join(" "),
     redirect_uri: spotifyConfig.redirectUri,
     code_challenge_method: "S256",
@@ -64,11 +67,14 @@ export async function buildLoginUrl() {
 }
 
 export async function exchangeCodeForTokens(code: string) {
+  const clientId = getSpotifyClientId();
+  if (!clientId) throw new Error("Missing Spotify client id.");
+
   const verifier = localStorage.getItem(VERIFIER_KEY);
   if (!verifier) throw new Error("Missing PKCE verifier.");
 
   const body = new URLSearchParams({
-    client_id: spotifyConfig.clientId,
+    client_id: clientId,
     grant_type: "authorization_code",
     code,
     redirect_uri: spotifyConfig.redirectUri,
@@ -102,8 +108,11 @@ export async function exchangeCodeForTokens(code: string) {
 }
 
 export async function refreshTokens(tokens: SpotifyTokens) {
+  const clientId = getSpotifyClientId();
+  if (!clientId) throw new Error("Missing Spotify client id.");
+
   const body = new URLSearchParams({
-    client_id: spotifyConfig.clientId,
+    client_id: clientId,
     grant_type: "refresh_token",
     refresh_token: tokens.refreshToken,
   });
