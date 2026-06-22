@@ -161,6 +161,16 @@ function getRuntimePlatform() {
 
 const appWindow = getCurrentWindow();
 
+function isEditableShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+function isNativeSpaceTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("button, a, [role='button']"));
+}
+
 export function App() {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(() => getStoredTokens());
   const [profile, setProfile] = useState<SpotifyUser | null>(null);
@@ -169,6 +179,7 @@ export function App() {
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [webDevice, setWebDevice] = useState<WebPlaybackDevice | null>(null);
   const autoSelectedWebDeviceId = useRef<string | null>(null);
+  const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState("Ready");
   const [view, setView] = useState<View>("now");
   const [query, setQuery] = useState("");
@@ -990,17 +1001,88 @@ export function App() {
     if (!trackMenu) return;
 
     const close = () => setTrackMenu(null);
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-
     window.addEventListener("click", close);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", closeOnEscape);
-    };
+    return () => window.removeEventListener("click", close);
   }, [trackMenu]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const commandKey = event.ctrlKey || event.metaKey;
+
+      if (event.key === "Escape") {
+        if (trackMenu) {
+          event.preventDefault();
+          setTrackMenu(null);
+          return;
+        }
+        if (settingsOpen) {
+          event.preventDefault();
+          setSettingsOpen(false);
+          return;
+        }
+        if (profileMenuOpen) {
+          event.preventDefault();
+          closeProfileMenu();
+        }
+        return;
+      }
+
+      if (commandKey && event.code === "KeyP") {
+        event.preventDefault();
+        closeProfileMenu();
+        setSettingsOpen(true);
+        return;
+      }
+
+      if (commandKey && event.code === "KeyK") {
+        event.preventDefault();
+        setView("search");
+        window.setTimeout(() => globalSearchInputRef.current?.focus(), 0);
+        return;
+      }
+
+      if (commandKey && event.code === "KeyL") {
+        event.preventDefault();
+        if (track) setView((current) => (current === "lyrics" ? "now" : "lyrics"));
+        return;
+      }
+
+      if (isEditableShortcutTarget(event.target)) return;
+
+      if (commandKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        const direction = event.key === "ArrowUp" ? 5 : -5;
+        changeVolume(Math.min(100, Math.max(0, localVolume + direction)));
+        return;
+      }
+
+      if (event.altKey && event.key === "ArrowLeft") {
+        event.preventDefault();
+        control("previous");
+        return;
+      }
+
+      if (event.altKey && event.key === "ArrowRight") {
+        event.preventDefault();
+        control("next");
+        return;
+      }
+
+      if (
+        event.code === "Space" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !isNativeSpaceTarget(event.target)
+      ) {
+        event.preventDefault();
+        control("toggle");
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut, true);
+    return () => window.removeEventListener("keydown", handleShortcut, true);
+  }, [localVolume, playback, profileMenuOpen, settingsOpen, track, trackMenu]);
 
   async function login() {
     if (!getSpotifyClientId()) {
@@ -1646,6 +1728,7 @@ export function App() {
             <label className="search-box">
               <Search size={20} />
               <input
+                ref={globalSearchInputRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search Spotify tracks"

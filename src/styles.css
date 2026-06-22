@@ -674,7 +674,7 @@ input {
 
 .settings-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   gap: 18px;
   padding: 14px;

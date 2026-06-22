@@ -81,6 +81,24 @@ Validate the TypeScript and Vite production build:
 npm run build
 ```
 
+## Keyboard Shortcuts
+
+Shortcuts work while the Noctune window is focused. Letter shortcuts use physical key positions, so they behave consistently with any keyboard layout.
+
+| Shortcut | Action |
+| --- | --- |
+| `Space` | Play or pause |
+| `Ctrl+P` / `Cmd+P` | Open Settings |
+| `Ctrl+K` / `Cmd+K` | Open global search and focus the search field |
+| `Ctrl+L` / `Cmd+L` | Toggle between lyrics and the player |
+| `Ctrl+Up` / `Cmd+Up` | Increase volume by 5% |
+| `Ctrl+Down` / `Cmd+Down` | Decrease volume by 5% |
+| `Alt+Left` | Previous track |
+| `Alt+Right` | Next track |
+| `Esc` | Close the active settings, profile, or track menu |
+
+Playback shortcuts do not fire while typing in an input, textarea, select, or editable text area. `Space` also preserves the native behavior of focused buttons and links.
+
 ## Desktop Builds
 
 Build the Windows NSIS installer:
