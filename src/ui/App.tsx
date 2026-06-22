@@ -6,26 +6,22 @@ import {
   ListMusic,
   LogIn,
   Maximize2,
-  Mic2,
   Minus,
   MonitorSpeaker,
   PanelLeftClose,
   PanelLeftOpen,
-  Pause,
   Play,
   Rows3,
-  Repeat,
   Search,
   Settings,
-  Shuffle,
-  SkipBack,
-  SkipForward,
   Trash2,
-  Volume2,
   X,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RAIL_COLLAPSED_KEY } from "../bootstrap";
+import { LyricsView } from "../features/lyrics/LyricsView";
+import { useLyrics } from "../features/lyrics/useLyrics";
 import {
   buildLoginUrl,
   clearTokens,
@@ -87,6 +83,8 @@ import {
   saveCachedPlaylists,
   saveCachedPlaylistTracks,
 } from "./cache";
+import { persistLocalStorageKey } from "../storage";
+import { PlayerDock } from "./components/PlayerDock";
 import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { preloadTrackAccent, useAccent } from "./useAccent";
 
@@ -98,14 +96,12 @@ type TrackMenuState = {
   y: number;
 } | null;
 
-const RAIL_COLLAPSED_KEY = "custom-spotify-rail-collapsed";
-
 function loadRailCollapsed() {
   return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === "true";
 }
 
 function saveRailCollapsed(collapsed: boolean) {
-  window.localStorage.setItem(RAIL_COLLAPSED_KEY, String(collapsed));
+  persistLocalStorageKey(RAIL_COLLAPSED_KEY, String(collapsed));
 }
 
 function formatTime(ms = 0) {
@@ -124,10 +120,6 @@ function playlistImage(playlist: PlaylistSummary) {
 
 function playlistTrack(item: PlaylistTrack) {
   return item.track ?? item.item ?? null;
-}
-
-function rangeStyle(percent: number) {
-  return { "--range-fill": `${Math.min(100, Math.max(0, percent))}%` } as React.CSSProperties;
 }
 
 function normalizeHexColor(value: string) {
@@ -236,6 +228,12 @@ export function App() {
     () => track?.artists.map((artist) => artist.name).join(", ") ?? "No active track",
     [track],
   );
+  const lyrics = useLyrics({
+    track,
+    progressMs: localProgress,
+    active: view === "lyrics",
+    onStatus: setStatus,
+  });
 
   useEffect(() => {
     document.title = track ? `${track.name} - ${artists}` : "Noctune";
@@ -281,7 +279,6 @@ export function App() {
   );
   const volume = playback?.device?.volume_percent ?? localVolume;
   const duration = track?.duration_ms ?? 0;
-  const progressPercent = duration ? (localProgress / duration) * 100 : 0;
   const remainingMs = duration ? Math.max(0, duration - localProgress) : 0;
   const glowOutroStartMs = 8000;
   const glowOutroEndMs = 3000;
@@ -1723,25 +1720,12 @@ export function App() {
         )}
 
         {view === "lyrics" && (
-          <section className="lyrics-view">
-            <div className="lyrics-header">
-              <div>
-                <p>Lyrics</p>
-                <h2>{track?.name ?? "Nothing playing"}</h2>
-                <small>{artists}</small>
-              </div>
-              <button className="ghost compact" onClick={() => setView("now")}>
-                Now
-              </button>
-            </div>
-
-            <div className="lyrics-panel">
-              <p>Lyrics unavailable</p>
-              <span>
-                Provider is not connected yet. The screen is ready for synced or plain lyrics.
-              </span>
-            </div>
-          </section>
+          <LyricsView
+            track={track}
+            artists={artists}
+            lyrics={lyrics}
+            onBackToPlayer={() => setView("now")}
+          />
         )}
 
         {signedIn &&
@@ -1753,103 +1737,39 @@ export function App() {
               : "queue-preview stage-queue-preview",
           )}
 
-        <footer className="player">
-          <div className="mini-track">
-            {cover ? <img src={cover} alt="" /> : <span />}
-            <div>
-              <strong>{track?.name ?? "Nothing playing"}</strong>
-              <small>{artists}</small>
-            </div>
-          </div>
-
-          <div className="transport">
-            <div className="transport-buttons">
-              <button
-                className={playback?.shuffle_state ? "active-icon" : ""}
-                onClick={() =>
-                  tokens && playback
-                    ? void run(() => setShuffle(tokens, !playback.shuffle_state), "Changing shuffle")
-                    : undefined
-                }
-                title="Shuffle"
-                disabled={!playback || busy}
-              >
-                <Shuffle size={18} />
-              </button>
-              <button onClick={() => control("previous")} title="Previous" disabled={!playback || busy}>
-                <SkipBack size={22} />
-              </button>
-              <button
-                className="play"
-                onClick={() => control("toggle")}
-                title={playback?.is_playing ? "Pause" : "Play"}
-                disabled={!playback || busy}
-              >
-                {playback?.is_playing ? <Pause size={26} /> : <Play size={26} />}
-              </button>
-              <button onClick={() => control("next")} title="Next" disabled={!playback || busy}>
-                <SkipForward size={22} />
-              </button>
-              <button
-                className={playback?.repeat_state && playback.repeat_state !== "off" ? "active-icon" : ""}
-                onClick={cycleRepeat}
-                title="Repeat"
-                aria-label={playback?.repeat_state === "track" ? "Repeat one" : "Repeat"}
-                disabled={!playback || busy}
-              >
-                <Repeat size={18} />
-              </button>
-            </div>
-
-            <div className="progress">
-              <span>{formatTime(localProgress)}</span>
-              <input
-                type="range"
-                min={0}
-                max={duration || 1}
-                value={Math.min(localProgress, duration || 1)}
-                onChange={(event) => setLocalProgress(Number(event.target.value))}
-                onMouseUp={(event) => seek(Number(event.currentTarget.value))}
-                onKeyUp={(event) => seek(Number(event.currentTarget.value))}
-                disabled={!track || busy}
-                style={rangeStyle(progressPercent)}
-              />
-              <span>{formatTime(duration)}</span>
-            </div>
-          </div>
-
-          <div className="volume compact-volume">
-            <button
-              className={queueVisible ? "queue-toggle active-icon" : "queue-toggle"}
-              onClick={() => setQueueVisible((visible) => !visible)}
-              title={queueVisible ? "Hide queue" : "Show queue"}
-              disabled={!signedIn}
-            >
-              <ListMusic size={18} />
-            </button>
-            <button
-              className={view === "lyrics" ? "lyrics-toggle active-icon" : "lyrics-toggle"}
-              onClick={() => setView(view === "lyrics" ? "now" : "lyrics")}
-              title="Lyrics"
-              disabled={!track}
-            >
-              <Mic2 size={18} />
-            </button>
-            <Volume2 size={18} />
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={localVolume}
-              onChange={(event) => setLocalVolume(Number(event.target.value))}
-              onMouseUp={(event) => changeVolume(Number(event.currentTarget.value))}
-              onTouchEnd={(event) => changeVolume(Number(event.currentTarget.value))}
-              onKeyUp={(event) => changeVolume(Number(event.currentTarget.value))}
-              disabled={!playback?.device || busy}
-              style={rangeStyle(localVolume)}
-            />
-          </div>
-        </footer>
+        <PlayerDock
+          cover={cover}
+          trackName={track?.name ?? "Nothing playing"}
+          artists={artists}
+          shuffle={Boolean(playback?.shuffle_state)}
+          playing={Boolean(playback?.is_playing)}
+          repeat={playback?.repeat_state ?? "off"}
+          progressMs={localProgress}
+          durationMs={duration}
+          volume={localVolume}
+          busy={busy}
+          playbackAvailable={Boolean(playback)}
+          volumeAvailable={Boolean(playback?.device)}
+          queueVisible={queueVisible}
+          queueAvailable={signedIn}
+          lyricsActive={view === "lyrics"}
+          lyricsAvailable={Boolean(track)}
+          onToggleShuffle={() => {
+            if (tokens && playback) {
+              void run(() => setShuffle(tokens, !playback.shuffle_state), "Changing shuffle");
+            }
+          }}
+          onPrevious={() => control("previous")}
+          onTogglePlayback={() => control("toggle")}
+          onNext={() => control("next")}
+          onCycleRepeat={cycleRepeat}
+          onProgressPreview={setLocalProgress}
+          onSeek={seek}
+          onToggleQueue={() => setQueueVisible((visible) => !visible)}
+          onToggleLyrics={() => setView(view === "lyrics" ? "now" : "lyrics")}
+          onVolumePreview={setLocalVolume}
+          onVolumeCommit={changeVolume}
+        />
       </section>
 
       {settingsOpen && (

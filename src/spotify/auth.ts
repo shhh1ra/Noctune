@@ -1,8 +1,9 @@
 import { getSpotifyClientId, spotifyConfig } from "./config";
 import { createCodeChallenge, createCodeVerifier } from "./pkce";
+import { persistLocalStorageKey } from "../storage";
 
-const TOKEN_KEY = "spotify_tokens";
-const VERIFIER_KEY = "spotify_pkce_verifier";
+export const TOKEN_KEY = "spotify_tokens";
+export const VERIFIER_KEY = "spotify_pkce_verifier";
 
 export type SpotifyTokens = {
   accessToken: string;
@@ -38,11 +39,11 @@ export function getStoredTokens(): SpotifyTokens | null {
 }
 
 export function storeTokens(tokens: SpotifyTokens) {
-  localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens));
+  persistLocalStorageKey(TOKEN_KEY, JSON.stringify(tokens));
 }
 
 export function clearTokens() {
-  localStorage.removeItem(TOKEN_KEY);
+  persistLocalStorageKey(TOKEN_KEY, null);
 }
 
 export async function buildLoginUrl() {
@@ -51,7 +52,7 @@ export async function buildLoginUrl() {
 
   const verifier = createCodeVerifier();
   const challenge = await createCodeChallenge(verifier);
-  localStorage.setItem(VERIFIER_KEY, verifier);
+  persistLocalStorageKey(VERIFIER_KEY, verifier);
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -103,7 +104,7 @@ export async function exchangeCodeForTokens(code: string) {
   }
 
   storeTokens(tokens);
-  localStorage.removeItem(VERIFIER_KEY);
+  persistLocalStorageKey(VERIFIER_KEY, null);
   return tokens;
 }
 

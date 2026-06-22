@@ -1,10 +1,12 @@
+import { persistLocalStorageKey } from "../storage";
+
 const appOrigin =
   typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
 const defaultRedirectUri =
   appOrigin === "http://tauri.localhost"
     ? "http://127.0.0.1:43872/callback"
     : `${appOrigin}/callback`;
-const CLIENT_ID_KEY = "noctune_spotify_client_id";
+export const CLIENT_ID_KEY = "noctune_spotify_client_id";
 
 export function getStoredSpotifyClientId() {
   if (typeof window === "undefined") return "";
@@ -19,9 +21,9 @@ export function saveSpotifyClientId(clientId: string) {
   if (typeof window === "undefined") return;
   const normalized = clientId.trim();
   if (normalized) {
-    window.localStorage.setItem(CLIENT_ID_KEY, normalized);
+    persistLocalStorageKey(CLIENT_ID_KEY, normalized);
   } else {
-    window.localStorage.removeItem(CLIENT_ID_KEY);
+    persistLocalStorageKey(CLIENT_ID_KEY, null);
   }
 }
 
