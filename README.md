@@ -105,6 +105,10 @@ Tauri applications must be built on the target operating system. Code signing an
 
 ## Lyrics
 
+### LRCGet utility
+
+The repository includes `lrclib-tool`, a standalone portable Tauri + Vue utility for finding lyrics through LRCLIB and saving them as `.lrc` or `.txt` files. It can be used independently from Noctune when you only need to search for song lyrics. A future version will add manual timestamp synchronization similar to Musixmatch.
+
 Lyrics are resolved in this order:
 
 1. A saved local `.lrc` or `.txt` file.

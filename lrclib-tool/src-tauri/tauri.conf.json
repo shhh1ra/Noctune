@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LRCGet",
+  "version": "0.1.0",
+  "identifier": "dev.shhh1ra.lrcget",
+  "build": {
+    "beforeDevCommand": "npm run web:dev",
+    "devUrl": "http://127.0.0.1:5180",
+    "beforeBuildCommand": "npm run build:web",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{
+      "title": "LRCGet",
+      "width": 1080,
+      "height": 760,
+      "minWidth": 780,
+      "minHeight": 620,
+      "backgroundColor": "#0a0c0a"
+    }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false }
+}
+
