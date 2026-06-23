@@ -20,8 +20,10 @@ export async function loadWebPlaybackSdk() {
 export async function createWebPlaybackDevice(
   tokens: SpotifyTokens,
   onState: (state: Spotify.WebPlaybackState) => void,
+  initialVolumePercent = 75,
 ) {
   await loadWebPlaybackSdk();
+  const initialVolume = Math.min(1, Math.max(0, initialVolumePercent / 100));
 
   return new Promise<WebPlaybackDevice>((resolve, reject) => {
     const player = new Spotify.Player({
@@ -37,7 +39,7 @@ export async function createWebPlaybackDevice(
 
         callback(storedTokens.accessToken);
       },
-      volume: 0.75,
+      volume: initialVolume,
     });
 
     player.addListener("ready", ({ device_id }: { device_id: string }) => {

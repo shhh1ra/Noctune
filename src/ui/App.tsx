@@ -71,7 +71,7 @@ import {
   saveCachedPlaylists,
   saveCachedPlaylistTracks,
 } from "./cache";
-import { normalizeHexColor } from "./color";
+import { getReadableControlAccent, normalizeHexColor } from "./color";
 import { persistLocalStorageKey } from "../storage";
 import { MetadataContextMenu, MetadataMenuState } from "./components/MetadataContextMenu";
 import { PlayerDock } from "./components/PlayerDock";
@@ -83,6 +83,7 @@ import { TrackContextMenu, TrackMenuState } from "./components/TrackContextMenu"
 import { MacWindowControls, WindowsWindowControls } from "./components/WindowControls";
 import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { preloadTrackAccent, useAccent } from "./useAccent";
+import { clampVolume, loadStoredVolume, saveStoredVolume } from "./volume";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
 function loadRailCollapsed() {
@@ -174,7 +175,7 @@ export function App() {
   const [playlistHasMore, setPlaylistHasMore] = useState(false);
   const [playlistOffset, setPlaylistOffset] = useState(0);
   const [playlistScrolled, setPlaylistScrolled] = useState(false);
-  const [localVolume, setLocalVolume] = useState(75);
+  const [localVolume, setLocalVolume] = useState(() => loadStoredVolume());
   const [busy, setBusy] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -215,7 +216,9 @@ export function App() {
       ? { primary: customAccent, muted: customAccent }
       : accent;
   const activeControlAccent =
-    appSettings.customAccentEnabled && customAccent ? customAccent : "#1ed760";
+    appSettings.customAccentEnabled && customAccent
+      ? customAccent
+      : getReadableControlAccent(accent.primary);
 
   const artists = useMemo(
     () => track?.artists.map((artist) => artist.name).join(", ") ?? "No active track",
@@ -601,7 +604,9 @@ export function App() {
       nextPlayback?.device?.volume_percent !== null &&
       nextPlayback?.device?.volume_percent !== undefined
     ) {
-      setLocalVolume(nextPlayback.device.volume_percent);
+      const nextVolume = clampVolume(nextPlayback.device.volume_percent);
+      setLocalVolume(nextVolume);
+      saveStoredVolume(nextVolume);
     }
     setStatus(nextPlayback?.device ? "Connected" : "Choose a Spotify device");
   }
@@ -922,7 +927,7 @@ export function App() {
         },
       ]);
       setLocalProgress(state.position);
-    })
+    }, localVolume)
       .then((device) => {
         setWebDevice(device);
         setStatus("In-app playback ready");
@@ -1363,11 +1368,13 @@ export function App() {
   }
 
   function previewVolume(value: number) {
+    const nextVolume = clampVolume(value);
     volumeLockedUntil.current = Date.now() + 12_000;
-    setLocalVolume(value);
+    setLocalVolume(nextVolume);
+    saveStoredVolume(nextVolume);
     setPlayback((previous) =>
       previous?.device
-        ? { ...previous, device: { ...previous.device, volume_percent: value } }
+        ? { ...previous, device: { ...previous.device, volume_percent: nextVolume } }
         : previous,
     );
   }
