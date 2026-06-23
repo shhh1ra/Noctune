@@ -207,6 +207,8 @@ input:disabled {
 .profile-menu button,
 .track-context-menu,
 .track-context-menu button,
+.metadata-context-menu,
+.metadata-context-menu button,
 .settings-overlay,
 .settings-dialog,
 .settings-close,
@@ -611,6 +613,25 @@ input {
   padding: 10px;
   color: rgba(255, 255, 255, 0.56);
   font-size: 13px;
+}
+
+.metadata-context-menu {
+  width: 280px;
+}
+
+.metadata-context-menu button span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.metadata-context-menu button small {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-overlay {

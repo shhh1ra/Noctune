@@ -1,6 +1,6 @@
 [package]
 name = "noctune"
-version = "0.1.0"
+version = "1.2.0"
 description = "Lightweight custom Spotify desktop client"
 authors = ["shhh1ra"]
 edition = "2021"

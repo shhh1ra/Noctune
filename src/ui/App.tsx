@@ -1,23 +1,11 @@
 import {
-  ChevronRight,
-  ListPlus,
   Laptop,
-  LogOut,
   ListMusic,
   LogIn,
-  Maximize2,
-  Minus,
   MonitorSpeaker,
-  PanelLeftClose,
-  PanelLeftOpen,
   Play,
-  Rows3,
   Search,
-  Settings,
-  Trash2,
-  X,
 } from "lucide-react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RAIL_COLLAPSED_KEY } from "../bootstrap";
 import { LyricsView } from "../features/lyrics/LyricsView";
@@ -83,19 +71,20 @@ import {
   saveCachedPlaylists,
   saveCachedPlaylistTracks,
 } from "./cache";
+import { normalizeHexColor } from "./color";
 import { persistLocalStorageKey } from "../storage";
+import { MetadataContextMenu, MetadataMenuState } from "./components/MetadataContextMenu";
 import { PlayerDock } from "./components/PlayerDock";
+import { QueuePreview } from "./components/QueuePreview";
+import { AuthExpiredDialog, ClientIdDialog } from "./components/SessionDialogs";
+import { SettingsDialog } from "./components/SettingsDialog";
+import { Sidebar } from "./components/Sidebar";
+import { TrackContextMenu, TrackMenuState } from "./components/TrackContextMenu";
+import { MacWindowControls, WindowsWindowControls } from "./components/WindowControls";
 import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { preloadTrackAccent, useAccent } from "./useAccent";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
-type TrackMenuState = {
-  track: SpotifyTrack;
-  sourcePlaylist?: PlaylistSummary | null;
-  x: number;
-  y: number;
-} | null;
-
 function loadRailCollapsed() {
   return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === "true";
 }
@@ -120,13 +109,6 @@ function playlistImage(playlist: PlaylistSummary) {
 
 function playlistTrack(item: PlaylistTrack) {
   return item.track ?? item.item ?? null;
-}
-
-function normalizeHexColor(value: string) {
-  const trimmed = value.trim();
-  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
-  if (/^[0-9a-f]{6}$/i.test(trimmed)) return `#${trimmed}`;
-  return null;
 }
 
 function playlistStatusMessage(error: unknown, fallback: string) {
@@ -158,8 +140,6 @@ function getRuntimePlatform() {
 
   return desktopPlatform || navigatorPlatform || "desktop";
 }
-
-const appWindow = getCurrentWindow();
 
 function isEditableShortcutTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -199,6 +179,7 @@ export function App() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [authExpiredOpen, setAuthExpiredOpen] = useState(false);
+  const [metadataMenu, setMetadataMenu] = useState<MetadataMenuState>(null);
   const [trackMenu, setTrackMenu] = useState<TrackMenuState>(null);
   const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
   const [queueVisible, setQueueVisible] = useState(true);
@@ -216,6 +197,7 @@ export function App() {
   const [cachedImageUrls, setCachedImageUrls] = useState<Record<string, string>>({});
   const playlistLoadVersion = useRef(0);
   const libraryRateLimitUntil = useRef(0);
+  const volumeLockedUntil = useRef(0);
   const previousGlowTrackUri = useRef<string | null>(null);
   const preloadedVisualTrackUris = useRef<Set<string>>(new Set());
   const optimisticTransitionFromUri = useRef<string | null>(null);
@@ -579,12 +561,19 @@ export function App() {
     }
   }
 
+  function expireApiSession() {
+    clearTokens();
+    setTokens(null);
+    setProfile(null);
+    closeProfileMenu();
+    setAuthExpiredOpen(true);
+    setStatus("Spotify API session expired. Playback may continue.");
+  }
+
   function handleAuthExpired(error: unknown) {
     if (!isSpotifyAuthError(error)) return false;
 
-    resetSession(false);
-    setAuthExpiredOpen(true);
-    setStatus("Spotify session expired");
+    expireApiSession();
     return true;
   }
 
@@ -607,7 +596,11 @@ export function App() {
     syncPocketQueue(nextQueue, forcePocketQueueSync, nextPlayback?.item?.uri);
     setLocalProgress(nextPlayback?.progress_ms ?? 0);
     rememberTrackImages([nextPlayback?.item, ...(nextQueue?.queue ?? [])]);
-    if (nextPlayback?.device?.volume_percent !== null && nextPlayback?.device?.volume_percent !== undefined) {
+    if (
+      Date.now() > volumeLockedUntil.current &&
+      nextPlayback?.device?.volume_percent !== null &&
+      nextPlayback?.device?.volume_percent !== undefined
+    ) {
       setLocalVolume(nextPlayback.device.volume_percent);
     }
     setStatus(nextPlayback?.device ? "Connected" : "Choose a Spotify device");
@@ -1006,10 +999,23 @@ export function App() {
   }, [trackMenu]);
 
   useEffect(() => {
+    if (!metadataMenu) return;
+
+    const close = () => setMetadataMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [metadataMenu]);
+
+  useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
       const commandKey = event.ctrlKey || event.metaKey;
 
       if (event.key === "Escape") {
+        if (metadataMenu) {
+          event.preventDefault();
+          setMetadataMenu(null);
+          return;
+        }
         if (trackMenu) {
           event.preventDefault();
           setTrackMenu(null);
@@ -1082,7 +1088,7 @@ export function App() {
 
     window.addEventListener("keydown", handleShortcut, true);
     return () => window.removeEventListener("keydown", handleShortcut, true);
-  }, [localVolume, playback, profileMenuOpen, settingsOpen, track, trackMenu]);
+  }, [localVolume, metadataMenu, playback, profileMenuOpen, settingsOpen, track, trackMenu]);
 
   async function login() {
     if (!getSpotifyClientId()) {
@@ -1177,12 +1183,32 @@ export function App() {
   ) {
     event.preventDefault();
     event.stopPropagation();
+    setMetadataMenu(null);
     setTrackMenu({
       track: trackToOpen,
       sourcePlaylist,
       x: Math.max(12, Math.min(event.clientX, window.innerWidth - 540)),
       y: Math.max(12, Math.min(event.clientY, window.innerHeight - 360)),
     });
+  }
+
+  function openMetadataMenu(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setTrackMenu(null);
+    if (!track) return;
+    setMetadataMenu({
+      x: Math.max(12, Math.min(event.clientX, window.innerWidth - 300)),
+      y: Math.max(12, Math.min(event.clientY, window.innerHeight - 220)),
+    });
+  }
+
+  function copyMetadata(label: string, value: string) {
+    setMetadataMenu(null);
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => setStatus(`Copied ${label}`))
+      .catch(() => setStatus(`Could not copy ${label}`));
   }
 
   function queueTrack(trackToQueue: SpotifyTrack) {
@@ -1336,14 +1362,19 @@ export function App() {
     void run(() => seekPlayback(tokens, value), "Seeking");
   }
 
-  function changeVolume(value: number) {
-    if (!tokens) return;
+  function previewVolume(value: number) {
+    volumeLockedUntil.current = Date.now() + 12_000;
     setLocalVolume(value);
     setPlayback((previous) =>
       previous?.device
         ? { ...previous, device: { ...previous.device, volume_percent: value } }
         : previous,
     );
+  }
+
+  function changeVolume(value: number) {
+    if (!tokens) return;
+    previewVolume(value);
     void run(() => setPlaybackVolume(tokens, value), "Changing volume");
   }
 
@@ -1358,72 +1389,17 @@ export function App() {
     void run(() => setRepeat(tokens, next), "Changing repeat");
   }
 
-  function minimizeWindow() {
-    void appWindow.minimize();
-  }
-
-  function toggleMaximizeWindow() {
-    void appWindow.toggleMaximize();
-  }
-
-  function closeWindow() {
-    void appWindow.close();
-  }
-
-  const windowsWindowControls = (
-    <div className="window-controls windows-controls">
-      <button type="button" title="Minimize" onClick={minimizeWindow}>
-        <Minus size={16} />
-      </button>
-      <button type="button" title="Maximize" onClick={toggleMaximizeWindow}>
-        <Maximize2 size={14} />
-      </button>
-      <button type="button" title="Close" className="close" onClick={closeWindow}>
-        <X size={17} />
-      </button>
-    </div>
-  );
-
-  const macWindowControls = (
-    <div className="window-controls mac-controls" aria-label="Window controls">
-      <button type="button" title="Close" className="mac-close" onClick={closeWindow} />
-      <button type="button" title="Minimize" className="mac-minimize" onClick={minimizeWindow} />
-      <button type="button" title="Zoom" className="mac-zoom" onClick={toggleMaximizeWindow} />
-    </div>
-  );
-
   const signedIn = Boolean(tokens);
   const floatingQueueActive = signedIn && view === "now" && railCollapsed && queueVisible;
   const renderQueuePreview = (className: string) => (
-    <section className={className}>
-      <div className="queue-preview-title">
-        <span>Up next</span>
-        {nextQueueTracks.length > 0 && <small>{nextQueueTracks.length}</small>}
-      </div>
-      {nextQueueTracks.length > 0 ? (
-        nextQueueTracks.map((queueTrack, index) => (
-          <button
-            className="queue-preview-row"
-            key={`${queueTrack.uri}-${index}`}
-            onClick={() => playQueueItem(queueTrack, index)}
-            disabled={busy}
-          >
-            {displayTrackImage(queueTrack) ? <img src={displayTrackImage(queueTrack)} alt="" /> : <i />}
-            <span>
-              <strong>{queueTrack.name}</strong>
-              <small>
-                {manualQueueUris.includes(queueTrack.uri) && (
-                  <ListPlus className="queue-source-icon" size={13} />
-                )}
-                {queueTrack.artists.map((artist) => artist.name).join(", ")}
-              </small>
-            </span>
-          </button>
-        ))
-      ) : (
-        <p className="queue-empty">No queue yet</p>
-      )}
-    </section>
+    <QueuePreview
+      className={className}
+      tracks={nextQueueTracks}
+      manualQueueUris={manualQueueUris}
+      busy={busy}
+      getTrackImage={displayTrackImage}
+      onPlayTrack={playQueueItem}
+    />
   );
   const shellClass = [
     "shell",
@@ -1451,103 +1427,40 @@ export function App() {
         } as React.CSSProperties
       }
     >
-      <aside className={railCollapsed ? "rail collapsed" : "rail"}>
-        <button
-          className="rail-toggle"
-          title={railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          onClick={() => setRailCollapsedPersisted(!railCollapsed)}
-        >
-          {railCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-        </button>
-        <button
-          className={view === "now" ? "nav active" : "nav"}
-          title="Now playing"
-          onClick={() => setView("now")}
-        >
-          <ListMusic size={20} />
-          <span>Now</span>
-        </button>
-        <button
-          className={view === "playlists" ? "nav active" : "nav"}
-          title="Playlists"
-          onClick={() => {
-            setView("playlists");
-            setSelectedPlaylist(null);
-            setPlaylistTrackQuery("");
-          }}
-        >
-          <Rows3 size={20} />
-          <span>Playlists</span>
-        </button>
-        <button
-          className={view === "search" ? "nav active" : "nav"}
-          title="Search"
-          onClick={() => setView("search")}
-        >
-          <Search size={20} />
-          <span>Search</span>
-        </button>
-        <button
-          className={view === "devices" ? "nav active" : "nav"}
-          title="Devices"
-          onClick={() => setView("devices")}
-        >
-          <MonitorSpeaker size={20} />
-          <span>Devices</span>
-        </button>
-        <div className="rail-footer">
-          {signedIn &&
-            !railCollapsed &&
-            renderQueuePreview(
-              queueVisible
-                ? "queue-preview rail-queue-preview visible"
-                : "queue-preview rail-queue-preview",
-            )}
-          {signedIn ? (
-            <div className="profile-menu-wrap">
-              {profileMenuOpen && (
-                <div className="profile-menu">
-                  <button
-                    onClick={() => {
-                      setSettingsOpen(true);
-                      closeProfileMenu();
-                    }}
-                  >
-                    <Settings size={16} />
-                    Settings
-                  </button>
-                  <button
-                    onClick={() => {
-                      closeProfileMenu();
-                      signOut();
-                    }}
-                  >
-                    <LogOut size={16} />
-                    Sign out
-                  </button>
-                </div>
-              )}
-              <button className="profile-pill" onClick={toggleProfileMenu}>
-                {profileImage ? (
-                  <img src={profileImage} alt="" />
-                ) : (
-                  <span>{profileInitial(profile)}</span>
-                )}
-                <strong>{profile?.display_name ?? profile?.id ?? "Profile"}</strong>
-              </button>
-            </div>
-          ) : (
-            <button className="primary" onClick={login}>
-              <LogIn size={18} />
-              Connect Spotify
-            </button>
-          )}
-        </div>
-      </aside>
+      <Sidebar
+        collapsed={railCollapsed}
+        view={view}
+        signedIn={signedIn}
+        queueVisible={queueVisible}
+        profileMenuOpen={profileMenuOpen}
+        profileImage={profileImage}
+        profileInitial={profileInitial(profile)}
+        profileName={profile?.display_name ?? profile?.id ?? "Profile"}
+        renderQueuePreview={renderQueuePreview}
+        onToggleCollapsed={() => setRailCollapsedPersisted(!railCollapsed)}
+        onNavigateNow={() => setView("now")}
+        onNavigatePlaylists={() => {
+          setView("playlists");
+          setSelectedPlaylist(null);
+          setPlaylistTrackQuery("");
+        }}
+        onNavigateSearch={() => setView("search")}
+        onNavigateDevices={() => setView("devices")}
+        onToggleProfileMenu={toggleProfileMenu}
+        onOpenSettings={() => {
+          setSettingsOpen(true);
+          closeProfileMenu();
+        }}
+        onSignOut={() => {
+          closeProfileMenu();
+          signOut();
+        }}
+        onLogin={login}
+      />
 
       <section className="stage">
         <header className={isMacOs ? "topbar macos" : "topbar"}>
-          {isMacOs && macWindowControls}
+          {isMacOs && <MacWindowControls />}
           <div className="topbar-left" data-tauri-drag-region>
             <div className="app-brand">
               <span className="brand-mark" />
@@ -1558,12 +1471,15 @@ export function App() {
           <div className="topbar-drag-spacer" data-tauri-drag-region />
           <div className="topbar-right">
             <span data-tauri-drag-region>{playback?.device?.name ?? runtimePlatform}</span>
-            {!isMacOs && windowsWindowControls}
+            {!isMacOs && <WindowsWindowControls />}
           </div>
         </header>
 
         {view === "now" && (
-          <section className={floatingQueueActive ? "now-playing" : "now-playing queue-hidden"}>
+          <section
+            className={floatingQueueActive ? "now-playing" : "now-playing queue-hidden"}
+            onContextMenu={openMetadataMenu}
+          >
             <div className="cover-wrap">
               {cover ? <img src={cover} alt="" /> : <div className="cover-placeholder" />}
             </div>
@@ -1850,353 +1766,60 @@ export function App() {
           onSeek={seek}
           onToggleQueue={() => setQueueVisible((visible) => !visible)}
           onToggleLyrics={() => setView(view === "lyrics" ? "now" : "lyrics")}
-          onVolumePreview={setLocalVolume}
+          onVolumePreview={previewVolume}
           onVolumeCommit={changeVolume}
         />
       </section>
 
       {settingsOpen && (
-        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-          <section className="settings-dialog" onClick={(event) => event.stopPropagation()}>
-            <header className="settings-header">
-              <div>
-                <span>Noctune</span>
-                <h2>Settings</h2>
-              </div>
-              <button className="settings-close" onClick={() => setSettingsOpen(false)} title="Close">
-                <X size={18} />
-              </button>
-            </header>
-
-            <label className="settings-row">
-              <span>
-                <strong>Spotify Client ID</strong>
-                <small>Stored locally on this device. Used for Spotify login.</small>
-              </span>
-              <button
-                className="settings-mini-button"
-                onClick={() => {
-                  setSpotifyClientIdDraft(spotifyClientId || getSpotifyClientId());
-                  setClientIdPromptOpen(true);
-                }}
-                type="button"
-              >
-                Edit
-              </button>
-            </label>
-
-            <label className="settings-row">
-              <span>
-                <strong>Rate limit guard</strong>
-                <small>Pause playlist and search requests when Spotify returns too many requests.</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={appSettings.rateLimitGuardEnabled}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  if (!enabled) libraryRateLimitUntil.current = 0;
-                  updateSettings(
-                    {
-                      ...appSettings,
-                      rateLimitGuardEnabled: enabled,
-                    },
-                    enabled ? "Rate limit guard enabled" : "Rate limit guard disabled",
-                  );
-                }}
-              />
-              <i />
-            </label>
-
-            <label className="settings-row">
-              <span>
-                <strong>Custom accent color</strong>
-                <small>Override album colors throughout the app, including the background glow.</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={appSettings.customAccentEnabled}
-                onChange={(event) =>
-                  updateSettings(
-                    {
-                      ...appSettings,
-                      customAccentEnabled: event.target.checked,
-                    },
-                    event.target.checked ? "Custom accent enabled" : "Dynamic accent enabled",
-                  )
-                }
-              />
-              <i />
-            </label>
-
-            <div className={appSettings.customAccentEnabled ? "accent-settings visible" : "accent-settings"}>
-              <span
-                className="accent-preview"
-                style={{ background: customAccent ?? "#1ed760" }}
-              />
-              <input
-                className="accent-picker"
-                type="color"
-                value={customAccent ?? "#1ed760"}
-                onChange={(event) =>
-                  updateSettings({
-                    ...appSettings,
-                    customAccentColor: event.target.value,
-                  })
-                }
-                tabIndex={appSettings.customAccentEnabled ? 0 : -1}
-              />
-              <label>
-                <span>HEX</span>
-                <input
-                  value={appSettings.customAccentColor}
-                  onChange={(event) =>
-                    updateSettings({
-                      ...appSettings,
-                      customAccentColor: event.target.value,
-                    })
-                  }
-                  onBlur={() => {
-                    const nextColor = normalizeHexColor(appSettings.customAccentColor) ?? "#1ed760";
-                    updateSettings(
-                      {
-                        ...appSettings,
-                        customAccentColor: nextColor,
-                      },
-                      "Accent color updated",
-                    );
-                  }}
-                  placeholder="#1ed760"
-                  tabIndex={appSettings.customAccentEnabled ? 0 : -1}
-                />
-              </label>
-            </div>
-
-            <label className="settings-row">
-              <span>
-                <strong>Borders</strong>
-                <small>Enable accent borders on selected parts of the interface.</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={appSettings.bordersEnabled}
-                onChange={(event) =>
-                  updateSettings(
-                    {
-                      ...appSettings,
-                      bordersEnabled: event.target.checked,
-                    },
-                    event.target.checked ? "Borders enabled" : "Borders disabled",
-                  )
-                }
-              />
-              <i />
-            </label>
-
-            <div className={appSettings.bordersEnabled ? "border-settings visible" : "border-settings"}>
-              <label className="settings-row border-option">
-                <span>
-                  <strong>App border</strong>
-                  <small>Outline the whole application window.</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={appSettings.borderAppEnabled}
-                  onChange={(event) =>
-                    updateSettings({
-                      ...appSettings,
-                      borderAppEnabled: event.target.checked,
-                    })
-                  }
-                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
-                />
-                <i />
-              </label>
-              <label className="settings-row border-option">
-                <span>
-                  <strong>Dock border</strong>
-                  <small>Outline the bottom player dock.</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={appSettings.borderDockEnabled}
-                  onChange={(event) =>
-                    updateSettings({
-                      ...appSettings,
-                      borderDockEnabled: event.target.checked,
-                    })
-                  }
-                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
-                />
-                <i />
-              </label>
-              <label className="settings-row border-option">
-                <span>
-                  <strong>Profile border</strong>
-                  <small>Outline the profile button in the sidebar.</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={appSettings.borderProfileEnabled}
-                  onChange={(event) =>
-                    updateSettings({
-                      ...appSettings,
-                      borderProfileEnabled: event.target.checked,
-                    })
-                  }
-                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
-                />
-                <i />
-              </label>
-              <label className="settings-row border-option">
-                <span>
-                  <strong>Active sidebar button</strong>
-                  <small>Outline the selected sidebar navigation button.</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={appSettings.borderActiveNavEnabled}
-                  onChange={(event) =>
-                    updateSettings({
-                      ...appSettings,
-                      borderActiveNavEnabled: event.target.checked,
-                    })
-                  }
-                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
-                />
-                <i />
-              </label>
-              <label className="settings-row border-option">
-                <span>
-                  <strong>Queue border</strong>
-                  <small>Outline the queue panel in the sidebar and floating mode.</small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={appSettings.borderQueueEnabled}
-                  onChange={(event) =>
-                    updateSettings({
-                      ...appSettings,
-                      borderQueueEnabled: event.target.checked,
-                    })
-                  }
-                  tabIndex={appSettings.bordersEnabled ? 0 : -1}
-                />
-                <i />
-              </label>
-            </div>
-          </section>
-        </div>
+        <SettingsDialog
+          appSettings={appSettings}
+          customAccent={customAccent}
+          onClose={() => setSettingsOpen(false)}
+          onEditClientId={() => {
+            setSpotifyClientIdDraft(spotifyClientId || getSpotifyClientId());
+            setClientIdPromptOpen(true);
+          }}
+          onDisableRateLimitGuard={() => {
+            libraryRateLimitUntil.current = 0;
+          }}
+          onUpdateSettings={updateSettings}
+        />
       )}
 
-      {authExpiredOpen && (
-        <div className="settings-overlay session-overlay">
-          <section className="settings-dialog session-dialog">
-            <header className="settings-header">
-              <div>
-                <span>Spotify session</span>
-                <h2>Sign in again</h2>
-              </div>
-            </header>
-            <p className="session-copy">
-              Spotify says the authorization key is no longer valid. Connect your account again to continue.
-            </p>
-            <button className="hero-action session-action" onClick={login}>
-              <LogIn size={18} />
-              Connect Spotify
-            </button>
-          </section>
-        </div>
-      )}
+      {authExpiredOpen && <AuthExpiredDialog onLogin={login} />}
 
       {clientIdPromptOpen && (
-        <div className="settings-overlay session-overlay">
-          <section className="settings-dialog session-dialog client-id-dialog">
-            <header className="settings-header">
-              <div>
-                <span>Noctune setup</span>
-                <h2>Spotify Client ID</h2>
-              </div>
-              {getSpotifyClientId() && (
-                <button
-                  className="settings-close"
-                  onClick={() => setClientIdPromptOpen(false)}
-                  title="Close"
-                >
-                  <X size={18} />
-                </button>
-              )}
-            </header>
-            <p className="session-copy">
-              Paste your Spotify app Client ID. Noctune stores it locally and will use it for login.
-            </p>
-            <label className="client-id-field">
-              <span>Client ID</span>
-              <input
-                value={spotifyClientIdDraft}
-                onChange={(event) => setSpotifyClientIdDraft(event.target.value)}
-                placeholder="Spotify client id"
-                autoFocus
-              />
-            </label>
-            <button
-              className="hero-action session-action"
-              onClick={() => {
-                if (saveClientIdFromDraft()) void login();
-              }}
-            >
-              <LogIn size={18} />
-              Save and connect
-            </button>
-          </section>
-        </div>
+        <ClientIdDialog
+          canClose={Boolean(getSpotifyClientId())}
+          draft={spotifyClientIdDraft}
+          onClose={() => setClientIdPromptOpen(false)}
+          onDraftChange={setSpotifyClientIdDraft}
+          onSaveAndConnect={() => {
+            if (saveClientIdFromDraft()) void login();
+          }}
+        />
       )}
 
       {trackMenu && (
-        <div
-          className="track-context-menu"
-          style={{ left: trackMenu.x, top: trackMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="track-context-group has-submenu">
-            <button disabled={targetPlaylists.length === 0 || busy}>
-              <ListPlus size={16} />
-              Add to playlist
-              <ChevronRight size={16} />
-            </button>
-            <div className="track-context-submenu">
-              {targetPlaylists.length > 0 ? (
-                targetPlaylists.map((playlist) => (
-                  <button
-                    key={playlist.id}
-                    onClick={() => addTrackToPlaylist(trackMenu.track, playlist)}
-                    disabled={busy}
-                  >
-                    {playlist.name}
-                  </button>
-                ))
-              ) : (
-                <span>No editable playlists</span>
-              )}
-            </div>
-          </div>
-          <button onClick={() => queueTrack(trackMenu.track)} disabled={busy}>
-            <ListPlus size={16} />
-            Add to queue
-          </button>
-          {trackMenu.sourcePlaylist &&
-            (trackMenu.sourcePlaylist.kind === "liked" || trackMenu.sourcePlaylist.editable) && (
-              <button
-                onClick={() => removeTrackFromSource(trackMenu.track, trackMenu.sourcePlaylist!)}
-                disabled={busy}
-              >
-                <Trash2 size={16} />
-                {trackMenu.sourcePlaylist.kind === "liked"
-                  ? "Remove from your Liked Songs"
-                  : "Remove from this playlist"}
-              </button>
-            )}
-        </div>
+        <TrackContextMenu
+          menu={trackMenu}
+          targetPlaylists={targetPlaylists}
+          busy={busy}
+          onAddToPlaylist={addTrackToPlaylist}
+          onAddToQueue={queueTrack}
+          onRemoveFromSource={removeTrackFromSource}
+        />
+      )}
+
+      {metadataMenu && track && (
+        <MetadataContextMenu
+          menu={metadataMenu}
+          trackName={track.name}
+          artists={artists}
+          albumName={track.album.name}
+          onCopy={copyMetadata}
+        />
       )}
     </main>
   );
