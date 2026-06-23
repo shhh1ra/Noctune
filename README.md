@@ -1,3 +1,9 @@
+## GitHub Releases
+
+[![Noctune latest](https://img.shields.io/github/v/release/shhh1ra/Noctune?label=Noctune&logo=github)](https://github.com/shhh1ra/Noctune/releases/latest)
+
+[![LRCGET portable](https://img.shields.io/badge/LRCGET-Portable%20ZIP-brightgreen?logo=github)](https://github.com/shhh1ra/Noctune/releases/tag/lrcget)
+
 # Noctune
 
 Noctune is an open-source, cross-platform Spotify desktop client with a custom React interface and a lightweight Tauri shell. It can play music inside the application through Spotify Web Playback SDK or control another Spotify Connect device when local playback is unavailable.
