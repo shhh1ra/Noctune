@@ -29,14 +29,19 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build macOS app
-        run: npx tauri build --target universal-apple-darwin
+      - name: Build macOS app and DMG
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
 
-      - name: List bundle files
-        run: find src-tauri/target -maxdepth 8 | grep -E "bundle|dmg|app|Noctune" || true
+      - name: List outputs
+        run: find src-tauri/target -maxdepth 10 | grep -E "\.app|\.dmg|bundle|Noctune|noctune" || true
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -44,5 +49,5 @@ jobs:
           name: Noctune-macOS
           if-no-files-found: error
           path: |
-            src-tauri/target/**/release/bundle/**/*.dmg
-            src-tauri/target/**/release/bundle/**/*.app
+            src-tauri/target/**/bundle/**/*.dmg
+            src-tauri/target/**/bundle/**/*.app
