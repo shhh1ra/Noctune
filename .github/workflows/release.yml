@@ -35,11 +35,14 @@ jobs:
       - name: Build macOS app
         run: npx tauri build --target universal-apple-darwin
 
+      - name: List bundle files
+        run: find src-tauri/target -maxdepth 8 | grep -E "bundle|dmg|app|Noctune" || true
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Noctune-macOS
           if-no-files-found: error
           path: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.app
