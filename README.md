@@ -2,7 +2,7 @@
 
 [![Noctune latest](https://img.shields.io/github/v/release/shhh1ra/Noctune?label=Noctune&logo=github)](https://github.com/shhh1ra/Noctune/releases/latest)
 
-[![LRCGET portable](https://img.shields.io/badge/LRCGET-Portable%20ZIP-brightgreen?logo=github)](https://github.com/shhh1ra/Noctune/releases/tag/lrcget)
+[![LRCGET portable](https://img.shields.io/badge/LRCGET-Portable%20ZIP-brightgreen?logo=github)](https://github.com/shhh1ra/LRCGET/releases/latest)
 
 # Noctune
 
