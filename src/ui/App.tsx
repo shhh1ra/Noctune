@@ -1,14 +1,5 @@
-import {
-  Laptop,
-  ListMusic,
-  LogIn,
-  MonitorSpeaker,
-  Play,
-  Search,
-} from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RAIL_COLLAPSED_KEY } from "../bootstrap";
 import { LyricsView } from "../features/lyrics/LyricsView";
 import { useLyrics } from "../features/lyrics/useLyrics";
 import {
@@ -62,7 +53,6 @@ import {
 } from "../spotify/config";
 import {
   cacheImageBlob,
-  cachedTrackImage,
   clearUiCache,
   getCachedImageObjectUrl,
   loadCachedPlaylists,
@@ -73,7 +63,6 @@ import {
   saveCachedPlaylistTracks,
 } from "./cache";
 import { getReadableControlAccent, normalizeHexColor } from "./color";
-import { persistLocalStorageKey } from "../storage";
 import { MetadataContextMenu, MetadataMenuState } from "./components/MetadataContextMenu";
 import { PlayerDock } from "./components/PlayerDock";
 import { QueuePreview } from "./components/QueuePreview";
@@ -89,75 +78,25 @@ import { MacWindowControls, WindowsWindowControls } from "./components/WindowCon
 import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { preloadTrackAccent, useAccent } from "./useAccent";
 import { clampVolume, loadStoredVolume, saveStoredVolume } from "./volume";
-import { checkForUpdate } from "../update-check";
-import type { AvailableUpdate } from "../update-check";
-
-type View = "now" | "playlists" | "search" | "devices" | "lyrics";
-function loadRailCollapsed() {
-  return window.localStorage.getItem(RAIL_COLLAPSED_KEY) === "true";
-}
-
-function saveRailCollapsed(collapsed: boolean) {
-  persistLocalStorageKey(RAIL_COLLAPSED_KEY, String(collapsed));
-}
-
-function formatTime(ms = 0) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function bestImage(track?: SpotifyTrack | null) {
-  return cachedTrackImage(track);
-}
-
-function playlistImage(playlist: PlaylistSummary) {
-  return playlist.image;
-}
-
-function playlistTrack(item: PlaylistTrack) {
-  return item.track ?? item.item ?? null;
-}
-
-function playlistStatusMessage(error: unknown, fallback: string) {
-  if (!(error instanceof Error)) return fallback;
-  return error.message;
-}
-
-function profileInitial(profile?: SpotifyUser | null) {
-  return (profile?.display_name?.trim()[0] ?? profile?.id?.trim()[0] ?? "?").toUpperCase();
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function getRuntimePlatform() {
-  const desktopPlatform = window.desktop?.platform?.toLowerCase() ?? "";
-  const navigatorPlatform = navigator.platform?.toLowerCase() ?? "";
-  const userAgent = navigator.userAgent.toLowerCase();
-
-  if (
-    desktopPlatform.includes("darwin") ||
-    desktopPlatform.includes("mac") ||
-    navigatorPlatform.includes("mac") ||
-    userAgent.includes("mac os")
-  ) {
-    return "macos";
-  }
-
-  return desktopPlatform || navigatorPlatform || "desktop";
-}
-
-function isEditableShortcutTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
-}
-
-function isNativeSpaceTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  return Boolean(target.closest("button, a, [role='button']"));
-}
+import {
+  bestImage,
+  delay,
+  formatTime,
+  getRuntimePlatform,
+  isEditableShortcutTarget,
+  isNativeSpaceTarget,
+  loadRailCollapsed,
+  playlistStatusMessage,
+  playlistTrack,
+  profileInitial,
+  saveRailCollapsed,
+  View,
+} from "./appUtils";
+import { DevicesView } from "./views/DevicesView";
+import { NowPlayingView } from "./views/NowPlayingView";
+import { PlaylistsView } from "./views/PlaylistsView";
+import { SearchView } from "./views/SearchView";
+import { useAvailableUpdate } from "./useAvailableUpdate";
 
 export function App() {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(() => getStoredTokens());
@@ -212,8 +151,7 @@ export function App() {
   const pocketQueueLockedUntil = useRef(0);
   const profileExpandedRail = useRef(false);
   const [glowEntering, setGlowEntering] = useState(false);
-  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
-  const updateCheckStarted = useRef(false);
+  const [availableUpdate, setAvailableUpdate] = useAvailableUpdate();
 
   const track = playback?.item ?? null;
   const rawCover = bestImage(track);
@@ -239,15 +177,6 @@ export function App() {
     active: view === "lyrics",
     onStatus: setStatus,
   });
-
-  useEffect(() => {
-    if (updateCheckStarted.current) return;
-    updateCheckStarted.current = true;
-
-    void checkForUpdate()
-      .then(setAvailableUpdate)
-      .catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     document.title = track ? `${track.name} - ${artists}` : "Noctune";
@@ -1501,246 +1430,68 @@ export function App() {
         </header>
 
         {view === "now" && (
-          <section
-            className={floatingQueueActive ? "now-playing" : "now-playing queue-hidden"}
-            onContextMenu={openMetadataMenu}
-          >
-            <div className="cover-wrap">
-              {cover ? <img src={cover} alt="" /> : <div className="cover-placeholder" />}
-            </div>
-            <div className="track-copy">
-              <p>{track?.album.name ?? "No album selected"}</p>
-              <h1>{track?.name ?? "Play something in Spotify"}</h1>
-              <h2>{artists}</h2>
-              {!signedIn && (
-                <button className="hero-action" onClick={login}>
-                  <LogIn size={18} />
-                  Connect Spotify
-                </button>
-              )}
-            </div>
-          </section>
+          <NowPlayingView
+            floatingQueueActive={floatingQueueActive}
+            cover={cover}
+            track={track}
+            artists={artists}
+            signedIn={signedIn}
+            onLogin={login}
+            onOpenMetadataMenu={openMetadataMenu}
+          />
         )}
 
         {view === "playlists" && (
-          <section className="playlists-view">
-            {!selectedPlaylist ? (
-              <>
-                <div className="section-heading">
-                  <div>
-                    <p>Library</p>
-                    <h2>Playlists</h2>
-                  </div>
-                  <button
-                    className="ghost compact"
-                    onClick={() => void loadPlaylists(tokens, true)}
-                    disabled={!signedIn || loadingPlaylists}
-                  >
-                    Refresh
-                  </button>
-                </div>
-                <div className="playlist-grid">
-                  {playlists.map((playlist) => (
-                    <button
-                      className={
-                        playlist.kind === "liked" ? "playlist-card liked" : "playlist-card"
-                      }
-                      key={`${playlist.kind}-${playlist.id}`}
-                      onClick={() => void openPlaylist(playlist)}
-                      disabled={loadingPlaylists && playlists.length === 0}
-                    >
-                      {playlistImage(playlist) ? (
-                        <img src={playlistImage(playlist)} alt="" />
-                      ) : (
-                        <span className="playlist-art">
-                          <ListMusic size={32} />
-                        </span>
-                      )}
-                      <strong>{playlist.name}</strong>
-                      <small>
-                        {playlist.total} tracks - {playlist.owner}
-                      </small>
-                    </button>
-                  ))}
-                  {signedIn && !loadingPlaylists && playlists.length === 0 && (
-                    <p className="empty">No playlists found</p>
-                  )}
-                  {loadingPlaylists && <p className="empty">Loading playlists...</p>}
-                </div>
-              </>
-            ) : (
-              <div className="playlist-detail" onScroll={handlePlaylistScroll}>
-                <div className={playlistScrolled ? "playlist-sticky visible" : "playlist-sticky"}>
-                  <strong>{selectedPlaylist.name}</strong>
-                  <button
-                    className="playlist-play compact-play"
-                    onClick={() => playPlaylist(selectedPlaylist)}
-                    disabled={busy || playlistTracks.length === 0}
-                  >
-                    <Play size={16} />
-                    Play
-                  </button>
-                </div>
-                <div className="playlist-hero">
-                  {playlistImage(selectedPlaylist) ? (
-                    <img src={playlistImage(selectedPlaylist)} alt="" />
-                  ) : (
-                    <span className="playlist-art large">
-                      <ListMusic size={52} />
-                    </span>
-                  )}
-                  <div>
-                    <button
-                      className="text-button"
-                      onClick={() => {
-                        setSelectedPlaylist(null);
-                        setPlaylistTrackQuery("");
-                      }}
-                    >
-                      Back to playlists
-                    </button>
-                    <p>{selectedPlaylist.kind === "liked" ? "Saved tracks" : "Playlist"}</p>
-                    <div className="playlist-title-row">
-                      <h2>{selectedPlaylist.name}</h2>
-                      <button
-                        className="hero-action playlist-play"
-                        onClick={() => playPlaylist(selectedPlaylist)}
-                        disabled={busy || playlistTracks.length === 0}
-                      >
-                        <Play size={18} />
-                        Play
-                      </button>
-                    </div>
-                    <small>
-                      {selectedPlaylist.total} tracks - {selectedPlaylist.owner}
-                    </small>
-                  </div>
-                </div>
-                <label className="search-box playlist-search">
-                  <Search size={18} />
-                  <input
-                    value={playlistTrackQuery}
-                    onChange={(event) => setPlaylistTrackQuery(event.target.value)}
-                    placeholder="Search in this playlist"
-                    disabled={playlistTracks.length === 0}
-                  />
-                </label>
-                <div className="track-list">
-                  {visiblePlaylistTracks.map((item) => {
-                    const savedTrack = playlistTrack(item);
-                    const trackIndex = playlistTracks.findIndex(
-                      (candidate) => playlistTrack(candidate)?.uri === savedTrack?.uri,
-                    );
-                    return savedTrack ? (
-                      <button
-                        className="track-row"
-                        key={`${savedTrack.uri}-${trackIndex}`}
-                        onClick={() => playPlaylistTrack(savedTrack, trackIndex)}
-                        onContextMenu={(event) => openTrackMenu(event, savedTrack, selectedPlaylist)}
-                        disabled={busy}
-                      >
-                        <span>{trackIndex + 1}</span>
-                        {displayTrackImage(savedTrack) ? <img src={displayTrackImage(savedTrack)} alt="" /> : <i />}
-                        <span>
-                          <strong>{savedTrack.name}</strong>
-                          <small>{savedTrack.artists.map((artist) => artist.name).join(", ")}</small>
-                        </span>
-                        <small>{savedTrack.album.name}</small>
-                        <small>{formatTime(savedTrack.duration_ms)}</small>
-                      </button>
-                    ) : null;
-                  })}
-                  {loadingPlaylists && <p className="empty">Loading tracks...</p>}
-                  {loadingMoreTracks && <p className="empty">Loading more tracks...</p>}
-                  {!loadingPlaylists && playlistTracks.length === 0 && (
-                    <p className="empty">No playable tracks here</p>
-                  )}
-                  {!loadingPlaylists && playlistTracks.length > 0 && visiblePlaylistTracks.length === 0 && (
-                    <p className="empty">No tracks match this search</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
+          <PlaylistsView
+            playlists={playlists}
+            selectedPlaylist={selectedPlaylist}
+            playlistTracks={playlistTracks}
+            visiblePlaylistTracks={visiblePlaylistTracks}
+            playlistTrackQuery={playlistTrackQuery}
+            signedIn={signedIn}
+            busy={busy}
+            loadingPlaylists={loadingPlaylists}
+            loadingMoreTracks={loadingMoreTracks}
+            playlistScrolled={playlistScrolled}
+            getTrackImage={displayTrackImage}
+            onRefresh={() => void loadPlaylists(tokens, true)}
+            onOpenPlaylist={(playlist) => void openPlaylist(playlist)}
+            onBackToPlaylists={() => {
+              setSelectedPlaylist(null);
+              setPlaylistTrackQuery("");
+            }}
+            onPlaylistTrackQueryChange={setPlaylistTrackQuery}
+            onPlayPlaylist={playPlaylist}
+            onPlayPlaylistTrack={playPlaylistTrack}
+            onOpenTrackMenu={openTrackMenu}
+            onScroll={handlePlaylistScroll}
+          />
         )}
 
         {view === "search" && (
-          <section className="search-view">
-            <label className="search-box">
-              <Search size={20} />
-              <input
-                ref={globalSearchInputRef}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search Spotify tracks"
-                disabled={!signedIn}
-              />
-            </label>
-            <div className="results">
-              {searching && <p className="empty">Searching...</p>}
-              {!searching &&
-                results.map((result) => (
-                  <button
-                    className="result"
-                    key={result.uri}
-                    onClick={() => play(result)}
-                    onContextMenu={(event) => openTrackMenu(event, result)}
-                    disabled={busy}
-                  >
-                    {displayTrackImage(result) ? <img src={displayTrackImage(result)} alt="" /> : <span />}
-                    <span>
-                      <strong>{result.name}</strong>
-                      <small>
-                        {result.artists.map((artist) => artist.name).join(", ")} -{" "}
-                        {result.album.name}
-                      </small>
-                    </span>
-                    <Play size={18} />
-                  </button>
-                ))}
-              {!searching && signedIn && query.length > 1 && results.length === 0 && (
-                <p className="empty">No tracks found</p>
-              )}
-            </div>
-          </section>
+          <SearchView
+            query={query}
+            results={results}
+            searching={searching}
+            signedIn={signedIn}
+            busy={busy}
+            inputRef={globalSearchInputRef}
+            getTrackImage={displayTrackImage}
+            onQueryChange={setQuery}
+            onPlayTrack={play}
+            onOpenTrackMenu={openTrackMenu}
+          />
         )}
 
         {view === "devices" && (
-          <section className="devices-view">
-            {webDevice && (
-              <button
-                className={webPlaybackDeviceActive ? "device-row active" : "device-row"}
-                onClick={() => transfer(webDevice.deviceId, false)}
-                disabled={busy}
-              >
-                <Laptop size={22} />
-                <span>
-                  <strong>Noctune</strong>
-                  <small>Web Playback SDK device</small>
-                </span>
-              </button>
-            )}
-            {visibleDevices.map((device) => (
-              <button
-                key={device.id}
-                className={device.is_active ? "device-row active" : "device-row"}
-                onClick={() => transfer(device.id, false)}
-                disabled={busy || device.is_restricted}
-              >
-                <MonitorSpeaker size={22} />
-                <span>
-                  <strong>{device.name}</strong>
-                  <small>
-                    {device.type}
-                    {device.is_restricted ? " - restricted" : ""}
-                  </small>
-                </span>
-              </button>
-            ))}
-            {signedIn && visibleDevices.length === 0 && !webDevice && (
-              <p className="empty">Open Spotify on another device or wait for in-app playback.</p>
-            )}
-          </section>
+          <DevicesView
+            devices={visibleDevices}
+            webDevice={webDevice}
+            webPlaybackDeviceActive={webPlaybackDeviceActive}
+            signedIn={signedIn}
+            busy={busy}
+            onTransfer={transfer}
+          />
         )}
 
         {view === "lyrics" && (
