@@ -948,6 +948,12 @@ input {
   width: 100%;
 }
 
+.session-actions {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.55fr) minmax(180px, 1fr);
+  gap: 10px;
+}
+
 .primary,
 .ghost,
 .hero-action {

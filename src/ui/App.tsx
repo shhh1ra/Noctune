@@ -6,6 +6,7 @@ import {
   Play,
   Search,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RAIL_COLLAPSED_KEY } from "../bootstrap";
 import { LyricsView } from "../features/lyrics/LyricsView";
@@ -76,7 +77,11 @@ import { persistLocalStorageKey } from "../storage";
 import { MetadataContextMenu, MetadataMenuState } from "./components/MetadataContextMenu";
 import { PlayerDock } from "./components/PlayerDock";
 import { QueuePreview } from "./components/QueuePreview";
-import { AuthExpiredDialog, ClientIdDialog } from "./components/SessionDialogs";
+import {
+  AuthExpiredDialog,
+  ClientIdDialog,
+  UpdateAvailableDialog,
+} from "./components/SessionDialogs";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TrackContextMenu, TrackMenuState } from "./components/TrackContextMenu";
@@ -84,6 +89,8 @@ import { MacWindowControls, WindowsWindowControls } from "./components/WindowCon
 import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { preloadTrackAccent, useAccent } from "./useAccent";
 import { clampVolume, loadStoredVolume, saveStoredVolume } from "./volume";
+import { checkForUpdate } from "../update-check";
+import type { AvailableUpdate } from "../update-check";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
 function loadRailCollapsed() {
@@ -205,6 +212,8 @@ export function App() {
   const pocketQueueLockedUntil = useRef(0);
   const profileExpandedRail = useRef(false);
   const [glowEntering, setGlowEntering] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
+  const updateCheckStarted = useRef(false);
 
   const track = playback?.item ?? null;
   const rawCover = bestImage(track);
@@ -230,6 +239,15 @@ export function App() {
     active: view === "lyrics",
     onStatus: setStatus,
   });
+
+  useEffect(() => {
+    if (updateCheckStarted.current) return;
+    updateCheckStarted.current = true;
+
+    void checkForUpdate()
+      .then(setAvailableUpdate)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     document.title = track ? `${track.name} - ${artists}` : "Noctune";
@@ -1804,6 +1822,16 @@ export function App() {
           onDraftChange={setSpotifyClientIdDraft}
           onSaveAndConnect={() => {
             if (saveClientIdFromDraft()) void login();
+          }}
+        />
+      )}
+
+      {availableUpdate && (
+        <UpdateAvailableDialog
+          update={availableUpdate}
+          onClose={() => setAvailableUpdate(null)}
+          onOpenRelease={() => {
+            void openUrl(availableUpdate.url).then(() => setAvailableUpdate(null));
           }}
         />
       )}

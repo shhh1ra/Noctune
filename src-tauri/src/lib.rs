@@ -3,6 +3,7 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             storage_info,
             storage_read_text,
@@ -72,7 +73,11 @@ fn storage_root(app: &tauri::AppHandle) -> Result<(std::path::PathBuf, bool), St
     Ok((fallback_root, false))
 }
 
-fn storage_file(app: &tauri::AppHandle, folder: &str, key: &str) -> Result<std::path::PathBuf, String> {
+fn storage_file(
+    app: &tauri::AppHandle,
+    folder: &str,
+    key: &str,
+) -> Result<std::path::PathBuf, String> {
     let (root, _) = storage_root(app)?;
     let directory = root.join(folder);
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
@@ -89,7 +94,11 @@ fn storage_info(app: tauri::AppHandle) -> Result<StorageInfo, String> {
 }
 
 #[tauri::command]
-fn storage_read_text(app: tauri::AppHandle, folder: String, key: String) -> Result<Option<String>, String> {
+fn storage_read_text(
+    app: tauri::AppHandle,
+    folder: String,
+    key: String,
+) -> Result<Option<String>, String> {
     let path = storage_file(&app, &folder, &key)?;
     match std::fs::read_to_string(path) {
         Ok(content) => Ok(Some(content)),
@@ -133,7 +142,13 @@ fn storage_read_lyrics_file(
         let path = directory.join(&file_name);
 
         match std::fs::read_to_string(&path) {
-            Ok(content) => return Ok(Some((file_name, path.to_string_lossy().to_string(), content))),
+            Ok(content) => {
+                return Ok(Some((
+                    file_name,
+                    path.to_string_lossy().to_string(),
+                    content,
+                )))
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(error.to_string()),
         }
@@ -153,7 +168,11 @@ fn storage_write_lyrics_file(
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or("lrc");
-    let key = format!("{}.{}", sanitize_file_name(&track_key), sanitize_file_name(extension));
+    let key = format!(
+        "{}.{}",
+        sanitize_file_name(&track_key),
+        sanitize_file_name(extension)
+    );
     let path = storage_file(&app, "lyrics", &key)?;
     std::fs::write(&path, content).map_err(|error| error.to_string())?;
     Ok(path.to_string_lossy().to_string())

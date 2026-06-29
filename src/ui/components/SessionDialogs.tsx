@@ -1,4 +1,5 @@
-import { LogIn, X } from "lucide-react";
+import { Download, LogIn, X } from "lucide-react";
+import type { AvailableUpdate } from "../../update-check";
 
 type AuthExpiredDialogProps = {
   onLogin: () => void;
@@ -10,6 +11,12 @@ type ClientIdDialogProps = {
   onClose: () => void;
   onDraftChange: (value: string) => void;
   onSaveAndConnect: () => void;
+};
+
+type UpdateAvailableDialogProps = {
+  update: AvailableUpdate;
+  onClose: () => void;
+  onOpenRelease: () => void;
 };
 
 export function AuthExpiredDialog({ onLogin }: AuthExpiredDialogProps) {
@@ -72,6 +79,44 @@ export function ClientIdDialog({
           <LogIn size={18} />
           Save and connect
         </button>
+      </section>
+    </div>
+  );
+}
+
+export function UpdateAvailableDialog({
+  update,
+  onClose,
+  onOpenRelease,
+}: UpdateAvailableDialogProps) {
+  return (
+    <div className="settings-overlay session-overlay" onClick={onClose}>
+      <section
+        className="settings-dialog session-dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="settings-header">
+          <div>
+            <span>Update available</span>
+            <h2>{update.name}</h2>
+          </div>
+          <button className="settings-close" onClick={onClose} title="Later">
+            <X size={18} />
+          </button>
+        </header>
+        <p className="session-copy">
+          Noctune {update.latestVersion} is available. You are currently using version{" "}
+          {update.currentVersion}.
+        </p>
+        <div className="session-actions">
+          <button className="ghost" onClick={onClose}>
+            Later
+          </button>
+          <button className="hero-action session-action" onClick={onOpenRelease}>
+            <Download size={18} />
+            Open release
+          </button>
+        </div>
       </section>
     </div>
   );
