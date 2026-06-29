@@ -1,9 +1,10 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { persistLocalStorageKey } from "../storage";
 
 const appOrigin =
   typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
 const defaultRedirectUri =
-  appOrigin === "http://tauri.localhost"
+  isTauri()
     ? "http://127.0.0.1:43872/callback"
     : `${appOrigin}/callback`;
 export const CLIENT_ID_KEY = "noctune_spotify_client_id";

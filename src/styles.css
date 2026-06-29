@@ -157,6 +157,14 @@ input:disabled {
   padding: 24px 10px;
 }
 
+.shell.macos .rail {
+  padding-top: 58px;
+}
+
+.shell.macos .rail.collapsed {
+  padding-top: 58px;
+}
+
 .app-brand {
   display: flex;
   align-items: center;
@@ -1072,6 +1080,15 @@ input {
   flex: 0 0 auto;
   gap: 8px;
   margin-right: 12px;
+}
+
+.shell.macos > .mac-controls {
+  position: absolute;
+  top: 22px;
+  left: 22px;
+  z-index: 6;
+  margin-right: 0;
+  -webkit-app-region: no-drag;
 }
 
 .mac-controls button {

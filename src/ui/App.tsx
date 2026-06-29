@@ -1357,6 +1357,7 @@ export function App() {
   );
   const shellClass = [
     "shell",
+    isMacOs ? "macos" : "",
     glowEntering ? "glow-enter" : "",
     railCollapsed ? "rail-collapsed" : "",
     appSettings.bordersEnabled && appSettings.borderAppEnabled ? "border-app" : "",
@@ -1381,6 +1382,8 @@ export function App() {
         } as React.CSSProperties
       }
     >
+      {isMacOs && <MacWindowControls />}
+
       <Sidebar
         collapsed={railCollapsed}
         view={view}
@@ -1414,7 +1417,6 @@ export function App() {
 
       <section className="stage">
         <header className={isMacOs ? "topbar macos" : "topbar"}>
-          {isMacOs && <MacWindowControls />}
           <div className="topbar-left" data-tauri-drag-region>
             <div className="app-brand">
               <span className="brand-mark" />
