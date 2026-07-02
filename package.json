@@ -1,6 +1,6 @@
 {
   "name": "noctune",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "Lightweight custom Spotify desktop client with Web Playback SDK and Connect fallback.",
   "type": "module",

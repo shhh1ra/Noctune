@@ -1,4 +1,4 @@
-import { ListMusic, Trash2, Upload } from "lucide-react";
+import { AudioLines, ListMusic, Trash2, Upload } from "lucide-react";
 import { useRef } from "react";
 import { LyricsTrack } from "../../lyrics";
 import { LyricsFeature } from "./useLyrics";
@@ -7,16 +7,41 @@ type LyricsViewProps = {
   track: LyricsTrack | null;
   artists: string;
   lyrics: LyricsFeature;
+  following: boolean;
   onBackToPlayer: () => void;
+  onDetach: () => void;
+  onSync: () => void;
+  onSeekLine: (timeMs: number) => void;
 };
 
-export function LyricsView({ track, artists, lyrics, onBackToPlayer }: LyricsViewProps) {
+export function LyricsView({
+  track,
+  artists,
+  lyrics,
+  following,
+  onBackToPlayer,
+  onDetach,
+  onSync,
+  onSeekLine,
+}: LyricsViewProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (file) void lyrics.importFile(file);
+  }
+
+  function detachSyncedLyrics() {
+    if (lyrics.entry?.synced && following) onDetach();
+  }
+
+  function handleLyricsKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    detachSyncedLyrics();
   }
 
   return (
@@ -57,17 +82,52 @@ export function LyricsView({ track, artists, lyrics, onBackToPlayer }: LyricsVie
               <span>{lyrics.entry.synced ? "Synced lyrics" : "Plain lyrics"}</span>
               <small>{lyrics.entry.fileName}</small>
             </div>
-            <div className={lyrics.entry.synced ? "lyrics-lines synced" : "lyrics-lines plain"}>
-              {lyrics.entry.lines.map((line, index) => (
-                <p
-                  ref={lyrics.entry?.synced && index === lyrics.activeLineIndex ? lyrics.activeLineRef : undefined}
-                  className={lyrics.entry?.synced && index === lyrics.activeLineIndex ? "active" : ""}
-                  key={`${line.timeMs ?? "plain"}-${index}-${line.text}`}
-                >
-                  {line.text || "\u00a0"}
-                </p>
-              ))}
+            <div
+              className={lyrics.entry.synced ? "lyrics-lines synced" : "lyrics-lines plain"}
+              onWheel={detachSyncedLyrics}
+              onTouchMove={detachSyncedLyrics}
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) detachSyncedLyrics();
+              }}
+              onKeyDown={handleLyricsKeyDown}
+            >
+              {lyrics.entry.lines.map((line, index) => {
+                const seekable = lyrics.entry?.synced && line.timeMs !== null;
+
+                return (
+                  <p
+                    ref={lyrics.entry?.synced && index === lyrics.activeLineIndex ? lyrics.activeLineRef : undefined}
+                    className={[
+                      lyrics.entry?.synced && index === lyrics.activeLineIndex ? "active" : "",
+                      seekable ? "seekable" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    key={`${line.timeMs ?? "plain"}-${index}-${line.text}`}
+                    role={seekable ? "button" : undefined}
+                    tabIndex={seekable ? 0 : undefined}
+                    onClick={seekable ? () => onSeekLine(line.timeMs ?? 0) : undefined}
+                    onKeyDown={
+                      seekable
+                        ? (event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            onSeekLine(line.timeMs ?? 0);
+                          }
+                        : undefined
+                    }
+                  >
+                    {line.text || "\u00a0"}
+                  </p>
+                );
+              })}
             </div>
+            {lyrics.entry.synced && !following && (
+              <button className="lyrics-sync-button" type="button" onClick={onSync}>
+                <AudioLines size={20} />
+                Sync
+              </button>
+            )}
           </>
         ) : (
           <>

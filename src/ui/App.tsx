@@ -141,6 +141,7 @@ export function App() {
   );
   const [clientIdPromptOpen, setClientIdPromptOpen] = useState(() => !getSpotifyClientId());
   const [localProgress, setLocalProgress] = useState(0);
+  const [lyricsFollowing, setLyricsFollowing] = useState(true);
   const [cachedImageUrls, setCachedImageUrls] = useState<Record<string, string>>({});
   const playlistLoadVersion = useRef(0);
   const libraryRateLimitUntil = useRef(0);
@@ -174,9 +175,13 @@ export function App() {
   const lyrics = useLyrics({
     track,
     progressMs: localProgress,
-    active: view === "lyrics",
+    active: view === "lyrics" && lyricsFollowing,
     onStatus: setStatus,
   });
+
+  useEffect(() => {
+    setLyricsFollowing(true);
+  }, [track?.uri]);
 
   useEffect(() => {
     document.title = track ? `${track.name} - ${artists}` : "Noctune";
@@ -1501,7 +1506,14 @@ export function App() {
             track={track}
             artists={artists}
             lyrics={lyrics}
+            following={lyricsFollowing}
             onBackToPlayer={() => setView("now")}
+            onDetach={() => setLyricsFollowing(false)}
+            onSync={() => setLyricsFollowing(true)}
+            onSeekLine={(timeMs) => {
+              setLyricsFollowing(true);
+              seek(timeMs);
+            }}
           />
         )}
 

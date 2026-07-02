@@ -14,11 +14,13 @@ Noctune never accesses raw Spotify audio files. Playback and library operations 
 
 - In-app playback through Spotify Web Playback SDK with Spotify Connect fallback.
 - Playback controls: play/pause, previous/next, seek, volume, shuffle, repeat, and device transfer.
+- Automatic selection of the Noctune Web Playback SDK device on startup.
 - Global track search and full-playlist local search.
 - Liked Songs and Spotify playlist browsing with paginated track loading.
 - Track context menu with queue, playlist, Liked Songs, and removal actions where Spotify permits them.
 - Compact five-track queue preview with optimistic updates and later Spotify synchronization.
 - Dynamic album-art accent color or a persistent custom accent selected in Settings.
+- Dynamic control-color fallback for album accents that are too dark or too close to white.
 - Ambient background glow, artwork preloading, and optimistic track transitions.
 - Collapsible sidebar, custom Windows titlebar controls, and macOS traffic-light controls.
 - Optional accent borders for the application, dock, profile, navigation, and queue.
@@ -26,6 +28,7 @@ Noctune never accesses raw Spotify audio files. Playback and library operations 
 - Local lyrics import and automatic lookup through [LRCLIB](https://lrclib.net/).
 - Disk caching for settings, Spotify authorization data, playlist metadata, artwork, colors, and lyrics.
 - Windows media-session metadata with the current title, artist, artwork, and transport controls.
+- In-app update check against the latest GitHub release.
 - No client secret and no `.env` file required.
 
 ## Stack
@@ -127,11 +130,17 @@ npx tauri build
 
 Tauri applications must be built on the target operating system. Code signing and notarization are not configured yet.
 
+## Updates
+
+Noctune checks the latest public GitHub release on startup:
+
+```text
+https://github.com/shhh1ra/Noctune/releases/latest
+```
+
+If a newer version is available, the app shows a small update dialog and opens the release page through the native browser. Version comparison accepts tags such as `v1.3` and package versions such as `1.3.0` as equivalent.
+
 ## Lyrics
-
-### LRCGet utility
-
-The repository includes `lrclib-tool`, a standalone portable Tauri + Vue utility for finding lyrics through LRCLIB and saving them as `.lrc` or `.txt` files. It can be used independently from Noctune when you only need to search for song lyrics. A future version will add manual timestamp synchronization similar to Musixmatch.
 
 Lyrics are resolved in this order:
 
@@ -142,6 +151,8 @@ Lyrics are resolved in this order:
 Successful LRCLIB responses are written to disk. Synced LRC timestamps drive the active-line animation and scroll only the lyrics container, leaving the application layout fixed. Empty timed LRC rows are ignored so instrumental markers do not create large blank areas.
 
 The LRCLIB request implementation lives in `src/lyricsProvider.ts`; parsing and cache formats live in `src/lyrics.ts`; feature state and UI live in `src/features/lyrics/`.
+
+For external lyrics workflow, use the separate [LRCGET](https://github.com/shhh1ra/LRCGET/releases/latest) utility. Its source is not part of this repository.
 
 ## Local Data
 
@@ -169,9 +180,12 @@ The project is being split into small feature and platform boundaries:
 ```text
 src/
   bootstrap.ts              persisted-state initialization
+  update-check.ts           GitHub release update check
   spotify/                  OAuth, Web API, and playback integration
   features/lyrics/          lyrics state and presentation
   ui/components/            reusable interface components
+  ui/color.ts               accent and control-color decisions
+  ui/volume.ts              persisted playback volume helpers
   ui/App.tsx                application orchestration and navigation
   storage.ts                typed frontend storage bridge
   lyrics.ts                 LRC/plain-text parsing and cache models
