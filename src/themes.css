@@ -162,10 +162,11 @@
   border-color: var(--glass-edge-active);
 }
 
-.theme-liquid-glass .active-icon,
-.theme-liquid-glass .queue-source-icon {
-  color: #dfeaff;
-  filter: drop-shadow(0 0 10px rgba(223, 234, 255, 0.24));
+.theme-liquid-glass .transport .active-icon,
+.theme-liquid-glass .queue-toggle.active-icon,
+.theme-liquid-glass .lyrics-toggle.active-icon {
+  color: var(--control-active, #1ed760);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--control-active, #1ed760) 34%, transparent));
 }
 
 .theme-liquid-glass .primary,

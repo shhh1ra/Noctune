@@ -50,24 +50,11 @@ function rgba(color: { r: number; g: number; b: number }, alpha: number) {
   return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
 }
 
-function readableGlassRgb(color: { r: number; g: number; b: number }) {
-  const average = (color.r + color.g + color.b) / 3;
-  const maxChannel = Math.max(color.r, color.g, color.b);
-  const minChannel = Math.min(color.r, color.g, color.b);
-  const spread = maxChannel - minChannel;
-
-  if (average < 42) return mixRgb(color, { r: 190, g: 210, b: 236 }, 0.42);
-  if (average > 214 && spread < 34) return mixRgb(color, { r: 98, g: 118, b: 148 }, 0.54);
-  if (spread < 20) return mixRgb(color, { r: 124, g: 154, b: 194 }, 0.34);
-
-  return color;
-}
-
 export function getLiquidGlassPalette(primaryColor: string, mutedColor = primaryColor) {
   const primary = cssColorToRgb(primaryColor) ?? cssColorToRgb("#8aa8ff")!;
   const muted = cssColorToRgb(mutedColor) ?? primary;
-  const glass = readableGlassRgb(primary);
-  const glassMuted = readableGlassRgb(muted);
+  const glass = primary;
+  const glassMuted = muted;
   const deep = mixRgb(glassMuted, { r: 7, g: 10, b: 18 }, 0.72);
   const cool = mixRgb(glass, { r: 172, g: 220, b: 255 }, 0.18);
   const warm = mixRgb(glass, { r: 255, g: 150, b: 218 }, 0.18);
