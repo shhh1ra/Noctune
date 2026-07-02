@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { normalizeHexColor } from "../color";
 import { AppSettings } from "../settings";
+import { normalizeThemeId, themes } from "../themes";
 
 type SettingsDialogProps = {
   appSettings: AppSettings;
@@ -42,6 +43,33 @@ export function SettingsDialog({
           <button className="settings-mini-button" onClick={onEditClientId} type="button">
             Edit
           </button>
+        </label>
+
+        <label className="settings-row settings-select-row">
+          <span>
+            <strong>Theme</strong>
+            <small>{themes.find((theme) => theme.id === appSettings.themeId)?.description}</small>
+          </span>
+          <select
+            value={appSettings.themeId}
+            onChange={(event) => {
+              const themeId = normalizeThemeId(event.target.value);
+              const themeName = themes.find((theme) => theme.id === themeId)?.name ?? "Theme";
+              onUpdateSettings(
+                {
+                  ...appSettings,
+                  themeId,
+                },
+                `${themeName} theme enabled`,
+              );
+            }}
+          >
+            {themes.map((theme) => (
+              <option key={theme.id} value={theme.id}>
+                {theme.name}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="settings-row">

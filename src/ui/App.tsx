@@ -62,7 +62,7 @@ import {
   saveCachedPlaylists,
   saveCachedPlaylistTracks,
 } from "./cache";
-import { getReadableControlAccent, normalizeHexColor } from "./color";
+import { getLiquidGlassPalette, getReadableControlAccent, normalizeHexColor } from "./color";
 import { MetadataContextMenu, MetadataMenuState } from "./components/MetadataContextMenu";
 import { PlayerDock } from "./components/PlayerDock";
 import { QueuePreview } from "./components/QueuePreview";
@@ -76,6 +76,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TrackContextMenu, TrackMenuState } from "./components/TrackContextMenu";
 import { MacWindowControls, WindowsWindowControls } from "./components/WindowControls";
 import { AppSettings, loadSettings, saveSettings } from "./settings";
+import { getThemeDefinition } from "./themes";
 import { preloadTrackAccent, useAccent } from "./useAccent";
 import { clampVolume, loadStoredVolume, saveStoredVolume } from "./volume";
 import {
@@ -167,6 +168,11 @@ export function App() {
     appSettings.customAccentEnabled && customAccent
       ? customAccent
       : getReadableControlAccent(accent.primary);
+  const activeTheme = getThemeDefinition(appSettings.themeId);
+  const liquidGlassPalette = useMemo(
+    () => getLiquidGlassPalette(activeAccent.primary, activeAccent.muted),
+    [activeAccent.muted, activeAccent.primary],
+  );
 
   const artists = useMemo(
     () => track?.artists.map((artist) => artist.name).join(", ") ?? "No active track",
@@ -1362,6 +1368,7 @@ export function App() {
   );
   const shellClass = [
     "shell",
+    activeTheme.shellClass,
     isMacOs ? "macos" : "",
     glowEntering ? "glow-enter" : "",
     railCollapsed ? "rail-collapsed" : "",
@@ -1382,6 +1389,16 @@ export function App() {
           "--accent": activeAccent.primary,
           "--accent-muted": activeAccent.muted,
           "--control-active": activeControlAccent,
+          "--glass-tint": liquidGlassPalette.tint,
+          "--glass-tint-soft": liquidGlassPalette.tintSoft,
+          "--glass-tint-faint": liquidGlassPalette.tintFaint,
+          "--glass-deep": liquidGlassPalette.deep,
+          "--glass-deep-soft": liquidGlassPalette.deepSoft,
+          "--glass-edge-dynamic": liquidGlassPalette.edge,
+          "--glass-edge-dynamic-soft": liquidGlassPalette.edgeSoft,
+          "--glass-shadow-dynamic": liquidGlassPalette.shadow,
+          "--glass-cool": liquidGlassPalette.cool,
+          "--glass-warm": liquidGlassPalette.warm,
           "--glow-scale": String(glowScale),
           "--glow-opacity": String(glowOpacity),
         } as React.CSSProperties

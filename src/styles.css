@@ -62,7 +62,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -223,6 +224,7 @@ input:disabled {
 .settings-row,
 .accent-settings,
 .border-settings,
+.settings-select-row select,
 .session-action,
 input {
   -webkit-app-region: no-drag;
@@ -735,6 +737,35 @@ input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
+}
+
+.settings-select-row {
+  cursor: default;
+}
+
+.settings-select-row select {
+  min-width: 170px;
+  min-height: 38px;
+  padding: 0 34px 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  outline: 0;
+  background:
+    linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, 0.78) 50%) calc(100% - 18px) 16px / 6px 6px no-repeat,
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78) 50%, transparent 50%) calc(100% - 12px) 16px / 6px 6px no-repeat,
+    rgba(255, 255, 255, 0.08);
+  color: #fff;
+  appearance: none;
+  cursor: pointer;
+}
+
+.settings-select-row select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.settings-select-row option {
+  color: #111315;
 }
 
 .settings-row i {

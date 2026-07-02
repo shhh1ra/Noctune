@@ -1,0 +1,281 @@
+.theme-liquid-glass {
+  --glass-surface: color-mix(in srgb, var(--glass-tint, rgba(248, 252, 255, 0.13)) 54%, rgba(255, 255, 255, 0.08));
+  --glass-surface-strong: color-mix(in srgb, var(--glass-tint, rgba(255, 255, 255, 0.2)) 64%, rgba(255, 255, 255, 0.12));
+  --glass-surface-soft: color-mix(in srgb, var(--glass-tint-soft, rgba(255, 255, 255, 0.075)) 72%, rgba(255, 255, 255, 0.035));
+  --glass-edge: var(--glass-edge-dynamic, rgba(255, 255, 255, 0.28));
+  --glass-edge-soft: var(--glass-edge-dynamic-soft, rgba(255, 255, 255, 0.14));
+  --glass-edge-active: var(--glass-edge-dynamic, rgba(224, 236, 255, 0.72));
+  --glass-shadow: var(--glass-shadow-dynamic, rgba(2, 8, 18, 0.42));
+  --glass-ink-muted: rgba(238, 246, 255, 0.68);
+  --glass-ink-soft: rgba(238, 246, 255, 0.52);
+  background:
+    radial-gradient(circle at 18% 24%, var(--glass-tint-soft, transparent), transparent 32%),
+    radial-gradient(circle at 76% 18%, var(--glass-warm, transparent), transparent 34%),
+    radial-gradient(circle at 86% 72%, var(--glass-cool, transparent), transparent 38%),
+    linear-gradient(120deg, var(--glass-deep, rgba(13, 22, 36, 0.94)) 0%, rgba(7, 9, 15, 0.88) 48%, var(--glass-deep-soft, rgba(23, 19, 34, 0.9)) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+
+.theme-liquid-glass::before {
+  inset: -24% -8% auto auto;
+  width: 82vw;
+  height: 72vh;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background:
+    linear-gradient(135deg, var(--glass-tint, color-mix(in srgb, var(--accent) 32%, transparent)), transparent 48%),
+    linear-gradient(235deg, var(--glass-cool, rgba(109, 210, 255, 0.2)), transparent 42%),
+    linear-gradient(315deg, var(--glass-warm, rgba(255, 122, 214, 0.16)), transparent 44%);
+  filter: blur(46px) saturate(1.22);
+  opacity: calc(var(--glow-opacity, 1) * 0.82);
+  transform: scale(var(--glow-scale, 1));
+}
+
+.theme-liquid-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 18%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.024) 0 1px, transparent 1px 7px);
+  opacity: 0.44;
+  mask-image: linear-gradient(180deg, black 0%, transparent 84%);
+}
+
+.theme-liquid-glass .rail,
+.theme-liquid-glass .player,
+.theme-liquid-glass .stage-queue-preview,
+.theme-liquid-glass .playlist-sticky,
+.theme-liquid-glass .settings-dialog,
+.theme-liquid-glass .profile-menu,
+.theme-liquid-glass .track-context-menu,
+.theme-liquid-glass .track-context-submenu {
+  border: 1px solid var(--glass-edge-soft);
+  background:
+    linear-gradient(180deg, var(--glass-surface), rgba(255, 255, 255, 0.052)),
+    var(--glass-deep-soft, rgba(7, 13, 22, 0.42));
+  box-shadow:
+    0 24px 70px var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(30px) saturate(1.38);
+}
+
+.theme-liquid-glass .rail {
+  border-top: 0;
+  border-right-color: var(--glass-edge);
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.theme-liquid-glass .app-brand,
+.theme-liquid-glass .track-copy h1,
+.theme-liquid-glass .section-heading h2,
+.theme-liquid-glass .playlist-hero h2,
+.theme-liquid-glass .lyrics-header h2 {
+  text-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+}
+
+.theme-liquid-glass .brand-mark {
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.95), transparent 32%),
+    linear-gradient(135deg, var(--glass-cool, #8ae8ff), var(--accent) 52%, var(--glass-warm, #ff93da));
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--accent) 62%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+}
+
+.theme-liquid-glass .topbar,
+.theme-liquid-glass .track-copy h2,
+.theme-liquid-glass .track-copy p,
+.theme-liquid-glass .section-heading p,
+.theme-liquid-glass .playlist-hero p,
+.theme-liquid-glass .empty {
+  color: var(--glass-ink-muted);
+}
+
+.theme-liquid-glass .rail-toggle,
+.theme-liquid-glass .nav,
+.theme-liquid-glass .ghost,
+.theme-liquid-glass .settings-close,
+.theme-liquid-glass .settings-mini-button,
+.theme-liquid-glass .lyrics-toggle,
+.theme-liquid-glass .queue-toggle,
+.theme-liquid-glass .window-controls button {
+  background: transparent;
+  color: var(--glass-ink-muted);
+}
+
+.theme-liquid-glass .rail-toggle,
+.theme-liquid-glass .ghost,
+.theme-liquid-glass .settings-close,
+.theme-liquid-glass .settings-mini-button,
+.theme-liquid-glass .search-box,
+.theme-liquid-glass .settings-row,
+.theme-liquid-glass .result,
+.theme-liquid-glass .device-row,
+.theme-liquid-glass .playlist-card,
+.theme-liquid-glass .playlist-play,
+.theme-liquid-glass .track-row:hover,
+.theme-liquid-glass .queue-preview-row:hover,
+.theme-liquid-glass .profile-pill:hover,
+.theme-liquid-glass .nav:hover,
+.theme-liquid-glass .nav.active {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(180deg, var(--glass-surface-strong), rgba(255, 255, 255, 0.055)),
+    var(--glass-tint-faint, rgba(255, 255, 255, 0.035));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+
+.theme-liquid-glass .nav,
+.theme-liquid-glass .track-row,
+.theme-liquid-glass .queue-preview-row,
+.theme-liquid-glass .profile-pill {
+  border: 1px solid transparent;
+}
+
+.theme-liquid-glass .nav.active {
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 3px 0 0 rgba(235, 243, 255, 0.78);
+}
+
+.theme-liquid-glass.border-active-nav .nav.active {
+  border-color: var(--glass-edge-active);
+}
+
+.theme-liquid-glass.border-app {
+  border-color: var(--glass-edge-active);
+}
+
+.theme-liquid-glass.border-dock .player,
+.theme-liquid-glass.border-profile .profile-pill,
+.theme-liquid-glass.border-queue .rail-queue-preview.visible,
+.theme-liquid-glass.border-queue .stage-queue-preview {
+  border-color: var(--glass-edge-active);
+}
+
+.theme-liquid-glass .active-icon,
+.theme-liquid-glass .queue-source-icon {
+  color: #dfeaff;
+  filter: drop-shadow(0 0 10px rgba(223, 234, 255, 0.24));
+}
+
+.theme-liquid-glass .primary,
+.theme-liquid-glass .hero-action {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.58)),
+    linear-gradient(135deg, var(--accent), var(--glass-cool, #8ae8ff));
+  color: #081018;
+  box-shadow:
+    0 16px 34px color-mix(in srgb, var(--accent) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.theme-liquid-glass .cover-wrap,
+.theme-liquid-glass .playlist-hero img,
+.theme-liquid-glass .playlist-art.large {
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    0 30px 82px rgba(0, 0, 0, 0.44),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.theme-liquid-glass .result:hover,
+.theme-liquid-glass .device-row:hover,
+.theme-liquid-glass .playlist-card:hover,
+.theme-liquid-glass .ghost:hover,
+.theme-liquid-glass .settings-close:hover,
+.theme-liquid-glass .settings-mini-button:hover,
+.theme-liquid-glass .window-controls button:hover,
+.theme-liquid-glass .lyrics-toggle:hover,
+.theme-liquid-glass .queue-toggle:hover {
+  background:
+    linear-gradient(180deg, var(--glass-surface-strong), rgba(255, 255, 255, 0.078)),
+    var(--glass-tint-soft, color-mix(in srgb, var(--accent) 8%, rgba(255, 255, 255, 0.04)));
+  color: #fff;
+}
+
+.theme-liquid-glass .player {
+  background:
+    linear-gradient(180deg, var(--glass-surface-strong), rgba(255, 255, 255, 0.07)),
+    var(--glass-deep-soft, rgba(7, 11, 18, 0.54));
+}
+
+.theme-liquid-glass .transport .play {
+  background:
+    radial-gradient(circle at 30% 20%, #fff 0 18%, transparent 20%),
+    linear-gradient(135deg, #f8fdff, #cddfff);
+  color: #071018;
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.theme-liquid-glass .progress input[type="range"]::-webkit-slider-runnable-track,
+.theme-liquid-glass .volume input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    #ffffff 0,
+    #ffffff var(--range-fill, 0%),
+    rgba(255, 255, 255, 0.26) var(--range-fill, 0%),
+    rgba(255, 255, 255, 0.26) 100%
+  );
+}
+
+.theme-liquid-glass .settings-overlay {
+  background:
+    linear-gradient(180deg, rgba(5, 9, 16, 0.5), rgba(5, 8, 14, 0.68)),
+    var(--glass-tint-soft, color-mix(in srgb, var(--accent) 10%, transparent));
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.theme-liquid-glass .settings-select-row select,
+.theme-liquid-glass .accent-settings label input,
+.theme-liquid-glass .client-id-field input {
+  border-color: var(--glass-edge-soft);
+  background-color: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.theme-liquid-glass .settings-row i {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.theme-liquid-glass .settings-row input:checked + i {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 74%, var(--glass-cool, #8ae8ff)), var(--accent));
+}
+
+.theme-liquid-glass .lyrics-panel {
+  border: 1px solid var(--glass-edge-soft);
+  background:
+    linear-gradient(180deg, var(--glass-tint, color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, 0.12))), rgba(255, 255, 255, 0.06)),
+    var(--glass-deep-soft, rgba(6, 10, 18, 0.5));
+  box-shadow:
+    0 26px 72px var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(26px) saturate(1.32);
+}
+
+.theme-liquid-glass .lyrics-sync-button {
+  background: rgba(255, 255, 255, 0.86);
+  color: #091018;
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.theme-liquid-glass .window-controls button.close:hover {
+  background: rgba(232, 17, 35, 0.86);
+}

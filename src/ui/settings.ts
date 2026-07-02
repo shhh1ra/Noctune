@@ -1,8 +1,10 @@
 import { persistLocalStorageKey } from "../storage";
+import { normalizeThemeId, ThemeId } from "./themes";
 
 export const SETTINGS_KEY = "custom_spotify_settings_v1";
 
 export type AppSettings = {
+  themeId: ThemeId;
   rateLimitGuardEnabled: boolean;
   customAccentEnabled: boolean;
   customAccentColor: string;
@@ -15,6 +17,7 @@ export type AppSettings = {
 };
 
 export const defaultSettings: AppSettings = {
+  themeId: "noctune",
   rateLimitGuardEnabled: true,
   customAccentEnabled: false,
   customAccentColor: "#1ed760",
@@ -30,7 +33,8 @@ export function loadSettings(): AppSettings {
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     if (!raw) return defaultSettings;
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    const settings = { ...defaultSettings, ...JSON.parse(raw) };
+    return { ...settings, themeId: normalizeThemeId(settings.themeId) };
   } catch {
     return defaultSettings;
   }

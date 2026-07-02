@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { initializeAppStorage } from "./bootstrap";
 import { App } from "./ui/App";
 import "./styles.css";
+import "./themes.css";
 
 async function bootstrap() {
   await initializeAppStorage().catch(() => undefined);
